@@ -13,6 +13,9 @@ import { join } from "path";
 import sequelize from "./config/database";
 import { DataTypes, QueryInterface } from "sequelize";
 import messageRoutes from "./routes/messageRoutes"; // Add this import
+import userAuthRoutes from "./routes/userAuthRoutes";
+import userTicketRoutes from "./routes/userTicketRoutes";
+import userGuideRoutes from "./routes/userGuideRoutes"; // Add this import
 
 dotenv.config();
 
@@ -71,7 +74,9 @@ runMigrations().then(() => {
   app.use("/api/tickets", ticketRoutes);
   app.use("/api/guides", guideRoutes);
   app.use("/api/analytics", analyticsRoutes);
-
+  app.use("/api/user/auth", userAuthRoutes);
+  app.use("/api/user/tickets", userTicketRoutes);
+  app.use("/api/user/guides", userGuideRoutes); // Add this line
   // src/app.ts (partial update)
 
   // Inside runMigrations().then() block, after other route definitions
