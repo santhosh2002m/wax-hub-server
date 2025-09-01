@@ -1,35 +1,27 @@
 import { QueryInterface, DataTypes } from "sequelize";
 
-export = {
+module.exports = {
   up: async (queryInterface: QueryInterface, Sequelize: typeof DataTypes) => {
-    await queryInterface.createTable("Tickets", {
+    await queryInterface.createTable("tickets", {
       id: {
         allowNull: false,
         autoIncrement: true,
         primaryKey: true,
         type: Sequelize.INTEGER,
       },
-      price: {
+      price: { type: Sequelize.FLOAT, allowNull: false },
+      dropdown_name: { type: Sequelize.STRING, allowNull: false },
+      show_name: { type: Sequelize.STRING, allowNull: false },
+      counter_id: {
         type: Sequelize.INTEGER,
-        allowNull: false,
+        allowNull: true,
+        references: { model: "counters", key: "id" },
       },
-      dropdown_name: {
-        type: Sequelize.STRING(100),
-      },
-      show_name: {
-        type: Sequelize.STRING(100),
-      },
-      createdAt: {
-        allowNull: false,
-        type: Sequelize.DATE,
-      },
-      updatedAt: {
-        allowNull: false,
-        type: Sequelize.DATE,
-      },
+      createdAt: { allowNull: false, type: Sequelize.DATE },
+      updatedAt: { allowNull: false, type: Sequelize.DATE },
     });
   },
-  down: async (queryInterface: QueryInterface, Sequelize: typeof DataTypes) => {
-    await queryInterface.dropTable("Tickets");
+  down: async (queryInterface: QueryInterface) => {
+    await queryInterface.dropTable("tickets");
   },
 };

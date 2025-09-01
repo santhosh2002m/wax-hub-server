@@ -1,18 +1,21 @@
-// src/routes/guideRoutes.ts
 import express from "express";
 import {
-  getGuides,
-  addGuide,
-  updateGuide,
-  deleteGuide,
-} from "../controllers/guideController";
-import { authenticate, authorize } from "../middlewares/authMiddleware";
+  getUserGuides,
+  createUserGuide,
+  updateUserGuide,
+  deleteUserGuide,
+} from "../controllers/userGuideController";
+import {
+  authenticateJWT,
+  authorizeAdmin,
+  authorizeAdminOrUser, // Import the new middleware
+} from "../middlewares/authMiddleware";
 
 const router = express.Router();
 
-router.get("/", authenticate, getGuides); // Accessible to both manager and admin
-router.post("/", authenticate, authorize(["admin"]), addGuide);
-router.put("/:id", authenticate, authorize(["admin"]), updateGuide);
-router.delete("/:id", authenticate, authorize(["admin"]), deleteGuide);
+router.get("/", authenticateJWT, authorizeAdminOrUser, getUserGuides); // Updated middleware
+router.post("/", authenticateJWT, authorizeAdmin, createUserGuide);
+router.put("/:id", authenticateJWT, authorizeAdmin, updateUserGuide);
+router.delete("/:id", authenticateJWT, authorizeAdmin, deleteUserGuide);
 
 export default router;

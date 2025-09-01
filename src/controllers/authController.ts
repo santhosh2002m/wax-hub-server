@@ -1,4 +1,4 @@
-// src/controllers/authController.ts
+// controllers/authController.ts
 import { Request, Response } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
@@ -21,6 +21,12 @@ export const login = async (req: Request, res: Response) => {
       return res.status(401).json({ message: "Invalid credentials" });
     }
 
+    if (counter.role === "user") {
+      return res
+        .status(403)
+        .json({ message: "Use /api/user/auth/login for user dashboard" });
+    }
+
     const token = jwt.sign(
       { id: counter.id, username, role: counter.role },
       process.env.JWT_SECRET as string,
@@ -31,6 +37,7 @@ export const login = async (req: Request, res: Response) => {
       username: counter.username,
       role: counter.role,
       createdAt: counter.createdAt,
+      special: counter.special,
     });
   } catch (error) {
     console.error("Error in login:", error);
@@ -48,7 +55,6 @@ export const editProfile = async (req: Request, res: Response) => {
       newPassword: string;
     };
 
-    // Validate new password length
     if (newPassword.length < 6) {
       return res
         .status(400)

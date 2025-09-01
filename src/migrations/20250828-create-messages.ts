@@ -1,49 +1,25 @@
 import { QueryInterface, DataTypes } from "sequelize";
 
-export = {
+module.exports = {
   up: async (queryInterface: QueryInterface, Sequelize: typeof DataTypes) => {
-    await queryInterface.createTable("Messages", {
+    await queryInterface.createTable("messages", {
       id: {
         allowNull: false,
         autoIncrement: true,
         primaryKey: true,
         type: Sequelize.INTEGER,
       },
-      phone: {
-        type: Sequelize.STRING(20),
-        allowNull: false,
-      },
-      message: {
-        type: Sequelize.TEXT,
-        allowNull: false,
-      },
-      status: {
-        type: Sequelize.ENUM("pending", "sent", "failed"),
-        allowNull: false,
-        defaultValue: "pending",
-      },
-      sentAt: {
-        type: Sequelize.DATE,
-        allowNull: true,
-      },
+      message: { type: Sequelize.TEXT, allowNull: false },
       counter_id: {
         type: Sequelize.INTEGER,
-        allowNull: true,
+        allowNull: false,
         references: { model: "counters", key: "id" },
-        onUpdate: "CASCADE",
-        onDelete: "SET NULL",
       },
-      createdAt: {
-        allowNull: false,
-        type: Sequelize.DATE,
-      },
-      updatedAt: {
-        allowNull: false,
-        type: Sequelize.DATE,
-      },
+      createdAt: { allowNull: false, type: Sequelize.DATE },
+      updatedAt: { allowNull: false, type: Sequelize.DATE },
     });
   },
-  down: async (queryInterface: QueryInterface, Sequelize: typeof DataTypes) => {
-    await queryInterface.dropTable("Messages");
+  down: async (queryInterface: QueryInterface) => {
+    await queryInterface.dropTable("messages");
   },
 };

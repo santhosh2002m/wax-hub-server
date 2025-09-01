@@ -4,12 +4,15 @@ import {
   getUserTickets,
   deleteUserTicket,
 } from "../controllers/userTicketController";
-import { authenticate } from "../middlewares/authMiddleware";
+import {
+  authenticateJWT,
+  authorizeUser, // Changed from authorizeManager to authorizeUser
+} from "../middlewares/authMiddleware";
 
 const router = express.Router();
 
-router.post("/", authenticate, createUserTicket);
-router.get("/", authenticate, getUserTickets);
-router.delete("/:id", authenticate, deleteUserTicket);
+router.post("/", authenticateJWT, authorizeUser, createUserTicket); // Changed middleware
+router.get("/", authenticateJWT, authorizeUser, getUserTickets); // Changed middleware
+router.delete("/:id", authenticateJWT, authorizeUser, deleteUserTicket); // Changed middleware
 
 export default router;

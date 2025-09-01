@@ -10,33 +10,25 @@ module.exports = {
         primaryKey: true,
         type: Sequelize.INTEGER,
       },
-      username: {
-        type: Sequelize.STRING(50),
-        unique: true,
-        allowNull: false,
-      },
-      password: {
-        type: Sequelize.STRING(255),
-        allowNull: false,
-      },
+      username: { type: Sequelize.STRING(50), unique: true, allowNull: false },
+      password: { type: Sequelize.STRING(255), allowNull: false },
       role: {
-        type: Sequelize.ENUM("manager", "admin"),
+        type: Sequelize.ENUM("manager", "admin", "user"), // Added "user" role
         defaultValue: "manager",
         allowNull: false,
       },
-      createdAt: {
-        // Use camelCase
+      special: {
+        type: Sequelize.BOOLEAN,
+        defaultValue: false,
         allowNull: false,
-        type: Sequelize.DATE,
       },
-      updatedAt: {
-        // Use camelCase
-        allowNull: false,
-        type: Sequelize.DATE,
-      },
+      createdAt: { allowNull: false, type: Sequelize.DATE },
+      updatedAt: { allowNull: false, type: Sequelize.DATE },
     });
   },
-  down: async (queryInterface: QueryInterface, Sequelize: typeof DataTypes) => {
-    await queryInterface.dropTable("counters");
+  down: async (queryInterface: QueryInterface) => {
+    await queryInterface.dropTable("transactions", { cascade: true });
+    await queryInterface.dropTable("messages", { cascade: true });
+    await queryInterface.dropTable("counters", { cascade: true });
   },
 };

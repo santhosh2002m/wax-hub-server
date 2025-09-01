@@ -1,12 +1,63 @@
-// src/controllers/ticketController.ts
+// FILE: controllers/ticketController.ts
 import { Request, Response } from "express";
 import Ticket from "../models/ticketModel";
 import Transaction from "../models/transactionModel";
-import { ticketSchema } from "../schemas/ticketSchema";
+import {
+  ticketCreateSchema,
+  ticketUpdateSchema,
+} from "../schemas/ticketSchema";
+import { Op } from "sequelize";
+
+interface AuthenticatedUser {
+  id: number;
+  username: string;
+  role: string;
+}
+
+// FILE: controllers/ticketController.ts
+// ... existing imports ...
 
 export const getTickets = async (req: Request, res: Response) => {
   try {
-    const tickets = await Ticket.findAll();
+    const user = (req as any).user as AuthenticatedUser;
+
+    // If user is admin, show ALL tickets (both admin and user tickets)
+    if (user.role === "admin") {
+      const tickets = await Ticket.findAll({
+        attributes: [
+          "id",
+          "price",
+          "dropdown_name",
+          "show_name",
+          "createdAt",
+          "is_analytics",
+          "counter_id",
+        ],
+        order: [["createdAt", "DESC"]],
+      });
+      return res.json(tickets);
+    }
+
+    // For non-admin users, show admin-created tickets and their own user-created tickets
+    const tickets = await Ticket.findAll({
+      where: {
+        [Op.or]: [
+          { is_analytics: false }, // Admin-created tickets
+          { counter_id: user.id }, // Their own user-created tickets
+        ],
+      },
+      attributes: [
+        "id",
+        "price",
+        "dropdown_name",
+        "show_name",
+        "createdAt",
+        "is_analytics",
+        "counter_id",
+      ],
+      order: [["createdAt", "DESC"]],
+    });
+
     res.json(tickets);
   } catch (error) {
     console.error("Error in getTickets:", error);
@@ -14,42 +65,91 @@ export const getTickets = async (req: Request, res: Response) => {
   }
 };
 
+// ... rest of the file remains the same ...
+export const getTicketById = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const user = (req as any).user as AuthenticatedUser;
+    const ticketId = parseInt(id, 10);
+
+    if (isNaN(ticketId)) {
+      return res.status(400).json({ message: "Invalid ticket ID" });
+    }
+
+    let whereClause: any = { id: ticketId };
+
+    // If user is not admin, restrict access
+    if (user.role !== "admin") {
+      whereClause[Op.or] = [
+        { is_analytics: false }, // Admin-created tickets
+        { counter_id: user.id }, // Their own user-created tickets
+      ];
+    }
+
+    const ticket = await Ticket.findOne({
+      where: whereClause,
+      attributes: [
+        "id",
+        "price",
+        "dropdown_name",
+        "show_name",
+        "createdAt",
+        "is_analytics",
+        "counter_id",
+      ],
+    });
+
+    if (!ticket) {
+      return res.status(404).json({ message: "Ticket not found" });
+    }
+
+    res.json(ticket);
+  } catch (error) {
+    console.error("Error in getTicketById:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
 export const addTicket = async (req: Request, res: Response) => {
   try {
-    const { error } = ticketSchema.validate(req.body);
-    if (error)
-      return res.status(400).json({ message: error.details[0].message });
-
-    // Create the ticket
-    const ticket = await Ticket.create(req.body);
-
-    // Create a corresponding transaction
-    const user = (req as any).user as { id: number; username: string };
-    const transaction = await Transaction.create({
-      invoice_no: `TICKET${ticket.id.toString().padStart(4, "0")}`,
-      date: new Date(),
-      adult_count: ticket.category === "Adult" ? 1 : 0,
-      child_count: ticket.category === "Child" ? 1 : 0,
-      category: ticket.category,
-      total_paid: ticket.price,
-      ticket_id: ticket.id,
-      counter_id: user.id, // Link to the authenticated user
+    const { error } = ticketCreateSchema.validate(req.body, {
+      abortEarly: false,
     });
+
+    if (error) {
+      return res.status(400).json({
+        message: "Validation error",
+        details: error.details.map((err) => err.message),
+      });
+    }
+
+    const user = (req as any).user as AuthenticatedUser;
+    const { dropdown_name, show_name, price } = req.body;
+
+    // Determine if this is an analytics ticket based on user role
+    const isAnalytics = user.role === "user"; // User-created tickets affect analytics
+
+    const ticket = await Ticket.create({
+      price: price,
+      dropdown_name: dropdown_name,
+      show_name: show_name,
+      counter_id: user.id,
+      is_analytics: isAnalytics,
+    } as any);
 
     res.status(201).json({
-      ticket,
-      transaction: {
-        invoice_no: transaction.invoice_no,
-        date: transaction.date,
-        adult_count: transaction.adult_count,
-        child_count: transaction.child_count,
-        category: transaction.category,
-        total_paid: transaction.total_paid,
-        ticket_id: transaction.ticket_id,
-        counter_id: transaction.counter_id,
+      message: "Ticket created successfully",
+      ticket: {
+        id: ticket.id,
+        price: ticket.price,
+        dropdown_name: ticket.dropdown_name,
+        show_name: ticket.show_name,
+        is_analytics: ticket.is_analytics,
+        counter_id: ticket.counter_id,
+        createdAt: ticket.createdAt,
       },
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error in addTicket:", error);
     res.status(500).json({ message: "Internal server error" });
   }
@@ -58,61 +158,51 @@ export const addTicket = async (req: Request, res: Response) => {
 export const updateTicket = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { error } = ticketSchema.validate(req.body);
-    if (error)
-      return res.status(400).json({ message: error.details[0].message });
+    const { error } = ticketUpdateSchema.validate(req.body, {
+      abortEarly: false,
+    });
 
-    // Validate and convert id to number
+    if (error) {
+      return res.status(400).json({
+        message: "Validation error",
+        details: error.details.map((err) => err.message),
+      });
+    }
+
     const ticketId = parseInt(id, 10);
     if (isNaN(ticketId)) {
       return res.status(400).json({ message: "Invalid ticket ID" });
     }
 
-    const ticket = await Ticket.findByPk(ticketId);
-    if (!ticket) return res.status(404).json({ message: "Ticket not found" });
+    const user = (req as any).user as AuthenticatedUser;
+    let whereClause: any = { id: ticketId };
 
-    // Update the ticket
-    await Ticket.update(req.body, { where: { id: ticketId } });
-
-    // Update or create a corresponding transaction
-    const user = (req as any).user as { id: number; username: string };
-    let transaction = await Transaction.findOne({
-      where: { ticket_id: ticketId },
-    });
-    if (transaction) {
-      await transaction.update({
-        invoice_no: `TICKET${ticketId.toString().padStart(4, "0")}`,
-        date: new Date(),
-        adult_count: req.body.category === "Adult" ? 1 : 0,
-        child_count: req.body.category === "Child" ? 1 : 0,
-        category: req.body.category,
-        total_paid: req.body.price,
-        counter_id: user.id,
-      });
-    } else {
-      transaction = await Transaction.create({
-        invoice_no: `TICKET${ticketId.toString().padStart(4, "0")}`,
-        date: new Date(),
-        adult_count: req.body.category === "Adult" ? 1 : 0,
-        child_count: req.body.category === "Child" ? 1 : 0,
-        category: req.body.category,
-        total_paid: req.body.price,
-        ticket_id: ticketId,
-        counter_id: user.id,
-      });
+    // If user is not admin, restrict access to their own tickets or admin tickets
+    if (user.role !== "admin") {
+      whereClause[Op.or] = [
+        { is_analytics: false }, // Can update admin-created tickets
+        { counter_id: user.id }, // Can update their own user-created tickets
+      ];
     }
 
+    const ticket = await Ticket.findOne({
+      where: whereClause,
+    });
+
+    if (!ticket) return res.status(404).json({ message: "Ticket not found" });
+
+    await ticket.update(req.body);
+
     res.json({
-      message: "Ticket updated",
-      transaction: {
-        invoice_no: transaction.invoice_no,
-        date: transaction.date,
-        adult_count: transaction.adult_count,
-        child_count: transaction.child_count,
-        category: transaction.category,
-        total_paid: transaction.total_paid,
-        ticket_id: transaction.ticket_id,
-        counter_id: transaction.counter_id,
+      message: "Ticket updated successfully",
+      ticket: {
+        id: ticket.id,
+        price: ticket.price,
+        dropdown_name: ticket.dropdown_name,
+        show_name: ticket.show_name,
+        is_analytics: ticket.is_analytics,
+        counter_id: ticket.counter_id,
+        createdAt: ticket.createdAt,
       },
     });
   } catch (error) {
@@ -124,22 +214,33 @@ export const updateTicket = async (req: Request, res: Response) => {
 export const deleteTicket = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-
-    // Validate and convert id to number
     const ticketId = parseInt(id, 10);
+
     if (isNaN(ticketId)) {
       return res.status(400).json({ message: "Invalid ticket ID" });
     }
 
-    const ticket = await Ticket.findByPk(ticketId);
+    const user = (req as any).user as AuthenticatedUser;
+    let whereClause: any = { id: ticketId };
+
+    // If user is not admin, restrict deletion to their own tickets
+    if (user.role !== "admin") {
+      whereClause.counter_id = user.id; // Only allow deleting their own tickets
+    }
+
+    const ticket = await Ticket.findOne({
+      where: whereClause,
+    });
+
     if (!ticket) return res.status(404).json({ message: "Ticket not found" });
 
-    // Delete associated transaction
+    // DELETE related transactions instead of setting to null
     await Transaction.destroy({ where: { ticket_id: ticketId } });
 
-    // Delete the ticket
+    // Then delete the ticket
     await Ticket.destroy({ where: { id: ticketId } });
-    res.json({ message: "Ticket deleted" });
+
+    res.json({ message: "Ticket deleted successfully" });
   } catch (error) {
     console.error("Error in deleteTicket:", error);
     res.status(500).json({ message: "Internal server error" });

@@ -1,4 +1,4 @@
-// src/models/counterModel.ts
+// models/counterModel.ts
 import { DataTypes, Model, Optional } from "sequelize";
 import sequelize from "../config/database";
 
@@ -6,16 +6,16 @@ interface CounterAttributes {
   id: number;
   username: string;
   password: string;
-  role: "manager" | "admin"; // New role field
-  createdAt?: Date; // Changed to camelCase
-  updatedAt?: Date; // Changed to camelCase
+  role: "manager" | "admin" | "user"; // Added "user" role
+  special: boolean;
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
-// Export the interface
 export interface CounterCreationAttributes
   extends Optional<
     CounterAttributes,
-    "id" | "createdAt" | "updatedAt" | "role"
+    "id" | "createdAt" | "updatedAt" | "role" | "special"
   > {}
 
 class Counter
@@ -25,49 +25,32 @@ class Counter
   public id!: number;
   public username!: string;
   public password!: string;
-  public role!: "manager" | "admin";
-  public readonly createdAt!: Date; // Changed to camelCase
-  public readonly updatedAt!: Date; // Changed to camelCase
+  public role!: "manager" | "admin" | "user"; // Updated role type
+  public special!: boolean;
+  public readonly createdAt!: Date;
+  public readonly updatedAt!: Date;
 }
 
 Counter.init(
   {
-    id: {
-      type: DataTypes.INTEGER,
-      autoIncrement: true,
-      primaryKey: true,
-    },
-    username: {
-      type: DataTypes.STRING(50),
-      unique: true,
-      allowNull: false,
-    },
-    password: {
-      type: DataTypes.STRING(255),
-      allowNull: false,
-    },
+    id: { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
+    username: { type: DataTypes.STRING(50), unique: true, allowNull: false },
+    password: { type: DataTypes.STRING(255), allowNull: false },
     role: {
-      type: DataTypes.ENUM("manager", "admin"),
-      defaultValue: "manager", // Default to manager
+      type: DataTypes.ENUM("manager", "admin", "user"), // Updated ENUM
+      defaultValue: "manager",
       allowNull: false,
     },
-    createdAt: {
-      // Changed to camelCase
-      type: DataTypes.DATE,
-      allowNull: false,
-    },
-    updatedAt: {
-      // Changed to camelCase
-      type: DataTypes.DATE,
-      allowNull: false,
-    },
+    special: { type: DataTypes.BOOLEAN, defaultValue: false, allowNull: false },
+    createdAt: { type: DataTypes.DATE, allowNull: false },
+    updatedAt: { type: DataTypes.DATE, allowNull: false },
   },
   {
     sequelize,
     modelName: "Counter",
     tableName: "counters",
-    timestamps: true, // Enable timestamps
-    underscored: false, // Disable underscored column names
+    timestamps: true,
+    underscored: false,
   }
 );
 

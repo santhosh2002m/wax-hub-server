@@ -1,9 +1,11 @@
+// controllers/userAuthController.ts
 import { Request, Response } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import User from "../models/userModel";
-import { userLoginSchema, userRegisterSchema } from "../schemas/userSchema";
+import Counter from "../models/counterModel"; // Use Counter instead of User
+import { userLoginSchema } from "../schemas/userSchema";
 
+// Make sure user login returns proper role information
 export const userLogin = async (req: Request, res: Response) => {
   try {
     const { error } = userLoginSchema.validate(req.body);
@@ -16,23 +18,28 @@ export const userLogin = async (req: Request, res: Response) => {
       password: string;
     };
 
-    const user = await User.findOne({ where: { username } });
+    const counter = await Counter.findOne({ where: { username } });
 
-    if (!user || !bcrypt.compareSync(password, user.password)) {
+    if (
+      !counter ||
+      !bcrypt.compareSync(password, counter.password) ||
+      (counter.role !== "user" && counter.role !== "admin") // Allow both user and admin
+    ) {
       return res.status(401).json({ message: "Invalid credentials" });
     }
 
     const token = jwt.sign(
-      { id: user.id, username, role: user.role },
+      { id: counter.id, username, role: counter.role },
       process.env.JWT_SECRET as string,
       { expiresIn: "8h" }
     );
 
     res.status(200).json({
       token,
-      username: user.username,
-      role: user.role,
-      createdAt: user.createdAt,
+      username: counter.username,
+      role: counter.role,
+      special: counter.special,
+      createdAt: counter.createdAt,
     });
   } catch (error) {
     console.error("Error in user login:", error);
@@ -42,35 +49,34 @@ export const userLogin = async (req: Request, res: Response) => {
 
 export const userRegister = async (req: Request, res: Response) => {
   try {
-    const { error } = userRegisterSchema.validate(req.body);
+    const { error } = userLoginSchema.validate(req.body); // Reuse login schema for simplicity
     if (error) {
       return res.status(400).json({ message: error.details[0].message });
     }
 
-    const { username, password, role } = req.body as {
+    const { username, password } = req.body as {
       username: string;
       password: string;
-      role?: "ticket_manager" | "admin";
     };
 
-    const existingUser = await User.findOne({ where: { username } });
+    const existingUser = await Counter.findOne({ where: { username } });
     if (existingUser) {
       return res.status(400).json({ message: "Username already exists" });
     }
 
     const hashedPassword = bcrypt.hashSync(password, 10);
 
-    const user = await User.create({
+    const counter = await Counter.create({
       username,
       password: hashedPassword,
-      role: role || "ticket_manager",
+      role: "user", // Force user role for user dashboard
     });
 
     res.status(201).json({
-      id: user.id,
-      username: user.username,
-      role: user.role,
-      createdAt: user.createdAt,
+      id: counter.id,
+      username: counter.username,
+      role: counter.role,
+      createdAt: counter.createdAt,
     });
   } catch (error) {
     console.error("Error in user registration:", error);
@@ -94,20 +100,23 @@ export const userChangePassword = async (req: Request, res: Response) => {
         .json({ message: "New password must be at least 6 characters long" });
     }
 
-    const userRecord = await User.findByPk(userId);
+    const counter = await Counter.findByPk(userId);
     if (
-      !userRecord ||
-      !bcrypt.compareSync(currentPassword, userRecord.password)
+      !counter ||
+      !bcrypt.compareSync(currentPassword, counter.password) ||
+      counter.role !== "user"
     ) {
-      return res.status(401).json({ message: "Invalid current password" });
+      return res
+        .status(401)
+        .json({ message: "Invalid current password or role" });
     }
 
-    userRecord.password = bcrypt.hashSync(newPassword, 10);
-    await userRecord.save();
+    counter.password = bcrypt.hashSync(newPassword, 10);
+    await counter.save();
 
     res.status(200).json({
       message: "Password updated successfully",
-      username: userRecord.username,
+      username: counter.username,
     });
   } catch (error) {
     console.error("Error in user change password:", error);

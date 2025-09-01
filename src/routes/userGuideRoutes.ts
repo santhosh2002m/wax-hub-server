@@ -7,15 +7,19 @@ import {
   deleteUserGuide,
   getTopPerformers,
 } from "../controllers/userGuideController";
-import { authenticate, authorize } from "../middlewares/authMiddleware";
+import {
+  authenticateJWT,
+  authorizeAdmin,
+  authorizeAdminOrUser, // Import the new middleware
+} from "../middlewares/authMiddleware";
 
 const router = express.Router();
 
-router.get("/", authenticate, getUserGuides);
-router.get("/top", authenticate, getTopPerformers);
-router.get("/:id", authenticate, getUserGuide);
-router.post("/", authenticate, authorize(["admin"]), createUserGuide);
-router.put("/:id", authenticate, authorize(["admin"]), updateUserGuide);
-router.delete("/:id", authenticate, authorize(["admin"]), deleteUserGuide);
+router.get("/", authenticateJWT, authorizeAdminOrUser, getUserGuides); // Updated middleware
+router.get("/top", authenticateJWT, authorizeAdminOrUser, getTopPerformers); // Updated middleware
+router.get("/:id", authenticateJWT, authorizeAdminOrUser, getUserGuide); // Updated middleware
+router.post("/", authenticateJWT, authorizeAdmin, createUserGuide);
+router.put("/:id", authenticateJWT, authorizeAdmin, updateUserGuide);
+router.delete("/:id", authenticateJWT, authorizeAdmin, deleteUserGuide);
 
 export default router;

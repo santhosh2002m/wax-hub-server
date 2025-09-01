@@ -1,9 +1,11 @@
+// FILE: controllers/analyticsController.ts
 import { Request, Response } from "express";
 import { Op, fn, col, WhereOptions } from "sequelize";
 import Ticket from "../models/ticketModel";
 import Transaction from "../models/transactionModel";
 import Counter from "../models/counterModel";
-import { transactionSchema } from "../schemas/transactionSchema";
+import UserTicket from "../models/userticketModel";
+import SpecialTicket from "../models/SpecialTicket";
 
 interface AttractionResult {
   total: number;
@@ -33,24 +35,13 @@ const formatHour = (date: Date) => {
   return `${hour12} ${ampm}`;
 };
 
-const formatDayOfWeek = (date: Date) => {
-  return date.toLocaleString("en-US", { weekday: "short" });
-};
+const formatMonthDay = (date: Date) =>
+  date.toLocaleString("en-US", { month: "short", day: "numeric" });
 
-const formatMonthDay = (date: Date) => {
-  return date.toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-  });
-};
+const formatISODate = (date: Date) => date.toISOString().split("T")[0];
 
-const formatISODate = (date: Date) => {
-  return date.toISOString().split("T")[0];
-};
-
-const formatMonth = (date: Date) => {
-  return date.toLocaleString("en-US", { month: "short" });
-};
+const formatMonth = (date: Date) =>
+  date.toLocaleString("en-US", { month: "short" });
 
 const subtractDays = (date: Date, days: number) => {
   const result = new Date(date);
@@ -91,6 +82,10 @@ const endOfYear = (date: Date) => {
   return d;
 };
 
+const includeCounter = {
+  include: [{ model: Counter, as: "counter", attributes: [] }],
+};
+
 export const getTodayOverview = async (req: Request, res: Response) => {
   try {
     const now = new Date();
@@ -99,29 +94,33 @@ export const getTodayOverview = async (req: Request, res: Response) => {
     const todayEnd = endOfDay(now);
     const yesterdayEnd = endOfDay(subtractDays(now, 1));
 
+    // Include ALL tickets (both admin and user created)
+    const whereClause: WhereOptions = {
+      createdAt: { [Op.gte]: today, [Op.lte]: todayEnd },
+    };
+    const yesterdayWhere: WhereOptions = {
+      createdAt: { [Op.gte]: yesterday, [Op.lte]: yesterdayEnd },
+    };
+
     const todayTickets = await Ticket.count({
-      where: {
-        createdAt: { [Op.gte]: today, [Op.lte]: todayEnd },
-      } as WhereOptions,
+      where: whereClause,
+      ...includeCounter,
     });
     const yesterdayTickets = await Ticket.count({
-      where: {
-        createdAt: { [Op.gte]: yesterday, [Op.lte]: yesterdayEnd },
-      } as WhereOptions,
+      where: yesterdayWhere,
+      ...includeCounter,
     });
     const ticketGrowth = calculateGrowth(todayTickets, yesterdayTickets);
 
     const todayAmount =
       (await Ticket.sum("price", {
-        where: {
-          createdAt: { [Op.gte]: today, [Op.lte]: todayEnd },
-        } as WhereOptions,
+        where: whereClause,
+        ...includeCounter,
       })) || 0;
     const yesterdayAmount =
       (await Ticket.sum("price", {
-        where: {
-          createdAt: { [Op.gte]: yesterday, [Op.lte]: yesterdayEnd },
-        } as WhereOptions,
+        where: yesterdayWhere,
+        ...includeCounter,
       })) || 0;
     const amountGrowth = calculateGrowth(todayAmount, yesterdayAmount);
 
@@ -129,15 +128,15 @@ export const getTodayOverview = async (req: Request, res: Response) => {
     const activeVisitors = await Ticket.count({
       where: {
         createdAt: { [Op.gte]: oneHourAgo },
-      } as WhereOptions,
+      },
+      ...includeCounter,
     });
 
     const attractions = (await Ticket.findAll({
-      attributes: [[fn("SUM", col("price")), "total"], "show_name", "category"],
-      group: ["show_name", "category"],
-      where: {
-        createdAt: { [Op.gte]: today, [Op.lte]: todayEnd },
-      } as WhereOptions,
+      attributes: [[fn("SUM", col("price")), "total"], "show_name"],
+      group: ["show_name"],
+      where: whereClause,
+      ...includeCounter,
       raw: true,
     })) as unknown as AttractionResult[];
 
@@ -155,7 +154,8 @@ export const getTodayOverview = async (req: Request, res: Response) => {
         const count = await Ticket.count({
           where: {
             createdAt: { [Op.gte]: hourStart, [Op.lt]: hourEnd },
-          } as WhereOptions,
+          },
+          ...includeCounter,
         });
         return { time: hour, value: count };
       })
@@ -179,64 +179,75 @@ export const getTodayOverview = async (req: Request, res: Response) => {
 export const getLast7Days = async (req: Request, res: Response) => {
   try {
     const now = new Date();
-    const sevenDaysAgo = startOfDay(subtractDays(now, 7));
-    const today = endOfDay(now);
-    const last7DaysAgo = startOfDay(subtractDays(now, 14));
-    const last7DaysEnd = endOfDay(subtractDays(now, 7));
+    const start = startOfDay(subtractDays(now, 6));
+    const end = endOfDay(now);
+    const previousStart = startOfDay(subtractDays(now, 13));
+    const previousEnd = endOfDay(subtractDays(now, 7));
 
-    const tickets = await Ticket.findAll({
-      where: {
-        createdAt: { [Op.between]: [sevenDaysAgo, today] },
-      } as WhereOptions,
+    // Include ALL tickets
+    const whereClause: WhereOptions = {
+      createdAt: { [Op.gte]: start, [Op.lte]: end },
+    };
+    const previousWhere: WhereOptions = {
+      createdAt: { [Op.gte]: previousStart, [Op.lte]: previousEnd },
+    };
+
+    const totalTickets = await Ticket.count({
+      where: whereClause,
+      ...includeCounter,
     });
-    const totalTickets = tickets.length;
-    const totalAmount = tickets.reduce((sum, ticket) => sum + ticket.price, 0);
-
-    const last7DaysTickets = await Ticket.findAll({
-      where: {
-        createdAt: { [Op.between]: [last7DaysAgo, last7DaysEnd] },
-      } as WhereOptions,
+    const previousTickets = await Ticket.count({
+      where: previousWhere,
+      ...includeCounter,
     });
-    const last7DaysAmount = last7DaysTickets.reduce(
-      (sum, ticket) => sum + ticket.price,
-      0
-    );
-    const weekGrowth = calculateGrowth(totalAmount, last7DaysAmount);
+    const ticketGrowth = calculateGrowth(totalTickets, previousTickets);
 
-    const dailyAverage = totalTickets / 7;
+    const totalAmount =
+      (await Ticket.sum("price", {
+        where: whereClause,
+        ...includeCounter,
+      })) || 0;
+    const previousAmount =
+      (await Ticket.sum("price", {
+        where: previousWhere,
+        ...includeCounter,
+      })) || 0;
+    const amountGrowth = calculateGrowth(totalAmount, previousAmount);
 
-    const days = Array.from({ length: 7 }, (_, i) =>
-      formatDayOfWeek(subtractDays(now, 6 - i))
-    );
+    const days = Array.from({ length: 7 }, (_, i) => {
+      const day = subtractDays(now, 6 - i);
+      return formatMonthDay(day);
+    });
+
     const chartData = await Promise.all(
       days.map(async (day, i) => {
         const dayStart = startOfDay(subtractDays(now, 6 - i));
-        const dayEnd = endOfDay(subtractDays(now, 6 - i));
+        const dayEnd = endOfDay(dayStart);
         const count = await Ticket.count({
           where: {
-            createdAt: { [Op.between]: [dayStart, dayEnd] },
-          } as WhereOptions,
+            createdAt: { [Op.gte]: dayStart, [Op.lte]: dayEnd },
+          },
+          ...includeCounter,
         });
-        return { day, value: count };
+        return { time: day, value: count };
       })
     );
 
     const attractions = (await Ticket.findAll({
-      attributes: [[fn("SUM", col("price")), "total"], "show_name", "category"],
-      group: ["show_name", "category"],
-      where: {
-        createdAt: { [Op.between]: [sevenDaysAgo, today] },
-      } as WhereOptions,
+      attributes: [[fn("SUM", col("price")), "total"], "show_name"],
+      group: ["show_name"],
+      where: whereClause,
+      ...includeCounter,
       raw: true,
     })) as unknown as AttractionResult[];
 
     res.json({
       totalTickets,
       totalAmount: `₹${totalAmount}`,
-      dailyAverage: dailyAverage.toFixed(2),
-      weekGrowth: weekGrowth.toFixed(2),
-      chartData,
+      ticketGrowth: ticketGrowth.toFixed(2),
+      revenueGrowth: amountGrowth.toFixed(2),
       attractions,
+      chartData,
     });
   } catch (error) {
     console.error("Error in getLast7Days:", error);
@@ -247,108 +258,75 @@ export const getLast7Days = async (req: Request, res: Response) => {
 export const getLast30Days = async (req: Request, res: Response) => {
   try {
     const now = new Date();
-    const thirtyDaysAgo = startOfDay(subtractDays(now, 30));
-    const today = endOfDay(now);
-    const last30DaysAgo = startOfDay(subtractDays(now, 60));
-    const last30DaysEnd = endOfDay(subtractDays(now, 30));
+    const start = startOfDay(subtractDays(now, 29));
+    const end = endOfDay(now);
+    const previousStart = startOfDay(subtractDays(now, 59));
+    const previousEnd = endOfDay(subtractDays(now, 30));
 
-    const tickets = await Ticket.findAll({
-      where: {
-        createdAt: { [Op.between]: [thirtyDaysAgo, today] },
-      } as WhereOptions,
+    // Include ALL tickets
+    const whereClause: WhereOptions = {
+      createdAt: { [Op.gte]: start, [Op.lte]: end },
+    };
+    const previousWhere: WhereOptions = {
+      createdAt: { [Op.gte]: previousStart, [Op.lte]: previousEnd },
+    };
+
+    const totalTickets = await Ticket.count({
+      where: whereClause,
+      ...includeCounter,
     });
-    const totalTickets = tickets.length;
-    const totalAmount = tickets.reduce((sum, ticket) => sum + ticket.price, 0);
-
-    const last30DaysTickets = await Ticket.findAll({
-      where: {
-        createdAt: { [Op.between]: [last30DaysAgo, last30DaysEnd] },
-      } as WhereOptions,
+    const previousTickets = await Ticket.count({
+      where: previousWhere,
+      ...includeCounter,
     });
-    const last30DaysAmount = last30DaysTickets.reduce(
-      (sum, ticket) => sum + ticket.price,
-      0
-    );
-    const monthGrowth = calculateGrowth(totalAmount, last30DaysAmount);
+    const ticketGrowth = calculateGrowth(totalTickets, previousTickets);
 
-    const dailyAverage = totalTickets / 30;
+    const totalAmount =
+      (await Ticket.sum("price", {
+        where: whereClause,
+        ...includeCounter,
+      })) || 0;
+    const previousAmount =
+      (await Ticket.sum("price", {
+        where: previousWhere,
+        ...includeCounter,
+      })) || 0;
+    const amountGrowth = calculateGrowth(totalAmount, previousAmount);
+
+    const days = Array.from({ length: 30 }, (_, i) => {
+      const day = subtractDays(now, 29 - i);
+      return formatMonthDay(day);
+    });
 
     const chartData = await Promise.all(
-      Array.from({ length: 30 }, (_, i) => {
+      days.map(async (day, i) => {
         const dayStart = startOfDay(subtractDays(now, 29 - i));
-        const dayEnd = endOfDay(subtractDays(now, 29 - i));
-        return Ticket.count({
+        const dayEnd = endOfDay(dayStart);
+        const count = await Ticket.count({
           where: {
-            createdAt: { [Op.between]: [dayStart, dayEnd] },
-          } as WhereOptions,
-        }).then((count) => ({
-          day: formatMonthDay(subtractDays(now, 29 - i)),
-          value: count,
-        }));
+            createdAt: { [Op.gte]: dayStart, [Op.lte]: dayEnd },
+          },
+          ...includeCounter,
+        });
+        return { time: day, value: count };
       })
     );
 
     const attractions = (await Ticket.findAll({
-      attributes: [[fn("SUM", col("price")), "total"], "show_name", "category"],
-      group: ["show_name", "category"],
-      where: {
-        createdAt: { [Op.between]: [thirtyDaysAgo, today] },
-      } as WhereOptions,
+      attributes: [[fn("SUM", col("price")), "total"], "show_name"],
+      group: ["show_name"],
+      where: whereClause,
+      ...includeCounter,
       raw: true,
     })) as unknown as AttractionResult[];
-
-    const totalTicketsLast = last30DaysTickets.length;
-    const dailyAverageLast = totalTicketsLast / 30;
-    const monthMetrics = [
-      {
-        title: "Total Tickets",
-        value: totalTickets,
-        icon: "Ticket",
-        trend: {
-          value: calculateGrowth(totalTickets, totalTicketsLast).toFixed(2),
-          isPositive: totalTickets >= totalTicketsLast,
-        },
-      },
-      {
-        title: "Total Amount",
-        value: `₹${totalAmount}`,
-        icon: "DollarSign",
-        variant: "primary",
-        trend: {
-          value: calculateGrowth(totalAmount, last30DaysAmount).toFixed(2),
-          isPositive: totalAmount >= last30DaysAmount,
-        },
-      },
-      {
-        title: "Daily Average",
-        value: dailyAverage.toFixed(2),
-        icon: "Users",
-        variant: "success",
-        trend: {
-          value: calculateGrowth(dailyAverage, dailyAverageLast).toFixed(2),
-          isPositive: dailyAverage >= dailyAverageLast,
-        },
-      },
-      {
-        title: "Month Growth",
-        value: `${monthGrowth.toFixed(2)}%`,
-        icon: "TrendingUp",
-        variant: "warning",
-        trend: {
-          value: monthGrowth.toFixed(2),
-          isPositive: monthGrowth >= 0,
-        },
-      },
-    ];
 
     res.json({
       totalTickets,
       totalAmount: `₹${totalAmount}`,
-      dailyAverage: dailyAverage.toFixed(2),
-      monthGrowth: monthGrowth.toFixed(2),
-      monthMetrics,
-      chartData,
+      ticketGrowth: ticketGrowth.toFixed(2),
+      revenueGrowth: amountGrowth.toFixed(2),
       attractions,
+      chartData,
     });
   } catch (error) {
     console.error("Error in getLast30Days:", error);
@@ -359,65 +337,75 @@ export const getLast30Days = async (req: Request, res: Response) => {
 export const getAnnualPerformance = async (req: Request, res: Response) => {
   try {
     const now = new Date();
-    const startOfYearDate = startOfYear(now);
-    const today = endOfDay(now);
-    const lastYearStart = startOfYear(subtractYears(now, 1));
-    const lastYearEnd = endOfYear(subtractYears(now, 1));
+    const start = startOfYear(now);
+    const end = endOfYear(now);
+    const previousStart = startOfYear(subtractYears(now, 1));
+    const previousEnd = endOfYear(subtractYears(now, 1));
 
-    const tickets = await Ticket.findAll({
-      where: {
-        createdAt: { [Op.between]: [startOfYearDate, today] },
-      } as WhereOptions,
+    // Include ALL tickets
+    const whereClause: WhereOptions = {
+      createdAt: { [Op.gte]: start, [Op.lte]: end },
+    };
+    const previousWhere: WhereOptions = {
+      createdAt: { [Op.gte]: previousStart, [Op.lte]: previousEnd },
+    };
+
+    const totalTickets = await Ticket.count({
+      where: whereClause,
+      ...includeCounter,
     });
-    const totalTickets = tickets.length;
-    const totalAmount = tickets.reduce((sum, ticket) => sum + ticket.price, 0);
-
-    const lastYearTickets = await Ticket.findAll({
-      where: {
-        createdAt: { [Op.between]: [lastYearStart, lastYearEnd] },
-      } as WhereOptions,
+    const previousTickets = await Ticket.count({
+      where: previousWhere,
+      ...includeCounter,
     });
-    const lastYearAmount = lastYearTickets.reduce(
-      (sum, ticket) => sum + ticket.price,
-      0
-    );
-    const annualGrowth = calculateGrowth(totalAmount, lastYearAmount);
+    const ticketGrowth = calculateGrowth(totalTickets, previousTickets);
 
-    const monthlyAverage = totalTickets / 12;
+    const totalAmount =
+      (await Ticket.sum("price", {
+        where: whereClause,
+        ...includeCounter,
+      })) || 0;
+    const previousAmount =
+      (await Ticket.sum("price", {
+        where: previousWhere,
+        ...includeCounter,
+      })) || 0;
+    const amountGrowth = calculateGrowth(totalAmount, previousAmount);
 
     const months = Array.from({ length: 12 }, (_, i) => {
-      const monthDate = new Date(now.getFullYear(), i, 1);
-      return formatMonth(monthDate);
+      const month = new Date(now.getFullYear(), i, 1);
+      return formatMonth(month);
     });
+
     const chartData = await Promise.all(
       months.map(async (month, i) => {
         const monthStart = startOfMonth(new Date(now.getFullYear(), i, 1));
-        const monthEnd = endOfMonth(new Date(now.getFullYear(), i, 1));
+        const monthEnd = endOfMonth(monthStart);
         const count = await Ticket.count({
           where: {
-            createdAt: { [Op.between]: [monthStart, monthEnd] },
-          } as WhereOptions,
+            createdAt: { [Op.gte]: monthStart, [Op.lte]: monthEnd },
+          },
+          ...includeCounter,
         });
-        return { month, value: count };
+        return { time: month, value: count };
       })
     );
 
     const attractions = (await Ticket.findAll({
-      attributes: [[fn("SUM", col("price")), "total"], "show_name", "category"],
-      group: ["show_name", "category"],
-      where: {
-        createdAt: { [Op.between]: [startOfYearDate, today] },
-      } as WhereOptions,
+      attributes: [[fn("SUM", col("price")), "total"], "show_name"],
+      group: ["show_name"],
+      where: whereClause,
+      ...includeCounter,
       raw: true,
     })) as unknown as AttractionResult[];
 
     res.json({
       totalTickets,
       totalAmount: `₹${totalAmount}`,
-      monthlyAverage: monthlyAverage.toFixed(2),
-      annualGrowth: annualGrowth.toFixed(2),
-      chartData,
+      ticketGrowth: ticketGrowth.toFixed(2),
+      revenueGrowth: amountGrowth.toFixed(2),
       attractions,
+      chartData,
     });
   } catch (error) {
     console.error("Error in getAnnualPerformance:", error);
@@ -427,51 +415,118 @@ export const getAnnualPerformance = async (req: Request, res: Response) => {
 
 export const getCalendarView = async (req: Request, res: Response) => {
   try {
-    const { start, end } = req.query;
+    const { startDate, endDate } = req.query;
 
-    if (!start || !end) {
+    if (!startDate || !endDate) {
       return res
         .status(400)
-        .json({ message: "Start and end dates are required" });
+        .json({ message: "startDate and endDate are required" });
     }
 
+    const whereClause: WhereOptions = {
+      createdAt: {
+        [Op.gte]: new Date(startDate as string),
+        [Op.lte]: new Date(endDate as string),
+      },
+    };
+
     const transactions = await Transaction.findAll({
-      where: {
-        date: {
-          [Op.between]: [new Date(start as string), new Date(end as string)],
-        },
-      } as WhereOptions,
+      where: whereClause,
       include: [
-        { model: Ticket, as: "ticket" },
-        { model: Counter, as: "counter" },
+        {
+          model: Ticket,
+          as: "ticket",
+          // Include ALL tickets (both admin and user)
+        },
+        { model: Counter, as: "counter", attributes: ["id", "username"] },
       ],
+      order: [["date", "ASC"]],
     });
 
-    const totalSales = transactions.length;
-    const totalAmount = transactions.reduce(
-      (sum, transaction) => sum + transaction.total_paid,
-      0
+    const calendarData = await Promise.all(
+      transactions.map(async (transaction: any) => {
+        const ticketJson = transaction.ticket.toJSON();
+        let additionalData = {};
+
+        if (
+          transaction.invoice_no.startsWith("TKT") ||
+          transaction.invoice_no.startsWith("SPT")
+        ) {
+          const isSpecial = transaction.invoice_no.startsWith("SPT");
+          const ticketDetails = isSpecial
+            ? await SpecialTicket.findOne({
+                where: { invoice_no: transaction.invoice_no },
+              })
+            : await UserTicket.findOne({
+                where: { invoice_no: transaction.invoice_no },
+              });
+
+          if (ticketDetails) {
+            additionalData = {
+              vehicle_type: ticketDetails.vehicle_type,
+              guide_name: ticketDetails.guide_name,
+              guide_number: ticketDetails.guide_number,
+              adults: ticketDetails.adults,
+              ticket_price: ticketDetails.ticket_price,
+              total_price: ticketDetails.total_price,
+              tax: ticketDetails.tax,
+              final_amount: ticketDetails.final_amount,
+              status: ticketDetails.status,
+            };
+          }
+        }
+
+        return {
+          date: formatISODate(transaction.date),
+          ticket: {
+            ...ticketJson,
+            ...additionalData,
+            invoice_no: transaction.invoice_no,
+            adult_count: transaction.adult_count,
+            child_count: transaction.child_count,
+            category: transaction.category,
+            total_paid: transaction.total_paid,
+            counter: transaction.counter
+              ? {
+                  id: transaction.counter.id,
+                  username: transaction.counter.username,
+                }
+              : null,
+          },
+        };
+      })
     );
 
-    const calendarData = transactions.map((transaction, index) => ({
-      id: transaction.id, // Include the actual transaction ID
-      sNo: index + 1,
-      invoiceNo:
-        transaction.invoice_no ||
-        `TICKET${transaction.id.toString().padStart(4, "0")}`,
-      date: formatISODate(new Date(transaction.date)),
-      showName: transaction.ticket?.show_name || "Unknown",
-      category: transaction.category || "Unknown",
-      counter: transaction.counter?.username || "N/A",
-      adult: transaction.adult_count,
-      child: transaction.child_count,
-      totalPaid: `₹${transaction.total_paid}.00`,
-    }));
+    // Group by date
+    const groupedCalendarData: { [key: string]: any[] } = {};
+
+    // Initialize all dates in the range with empty arrays
+    const start = new Date(startDate as string);
+    const end = new Date(endDate as string);
+    let currentDate = new Date(start);
+
+    while (currentDate <= end) {
+      const dateKey = formatISODate(currentDate);
+      groupedCalendarData[dateKey] = [];
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+
+    // Populate with actual data
+    calendarData.forEach((entry) => {
+      const { date, ticket } = entry;
+      if (!groupedCalendarData[date]) {
+        groupedCalendarData[date] = [];
+      }
+      groupedCalendarData[date].push(ticket);
+    });
 
     res.json({
-      totalSales,
-      totalAmount: `₹${totalAmount}`,
-      transactions: calendarData,
+      calendarData: groupedCalendarData,
+      totalSales: calendarData.length,
+      totalAmount: calendarData.reduce(
+        (sum, entry) => sum + (entry.ticket.total_paid || 0),
+        0
+      ),
     });
   } catch (error) {
     console.error("Error in getCalendarView:", error);
@@ -479,98 +534,224 @@ export const getCalendarView = async (req: Request, res: Response) => {
   }
 };
 
-export const updateTransaction = async (req: Request, res: Response) => {
+// ... rest of the file (deleteCalendarTransaction and updateCalendarTransaction) remains the same
+// NEW: Delete transaction and associated ticket
+export const deleteCalendarTransaction = async (
+  req: Request,
+  res: Response
+) => {
   try {
-    const { id } = req.params;
-    const { error } = transactionSchema.validate(req.body);
-    if (error)
-      return res.status(400).json({ message: error.details[0].message });
+    const { invoice_no } = req.params;
 
-    // Validate and convert id to number
-    const transactionId = parseInt(id, 10);
-    if (isNaN(transactionId)) {
-      return res.status(400).json({ message: "Invalid transaction ID" });
+    if (!invoice_no) {
+      return res.status(400).json({ message: "Invoice number is required" });
     }
 
-    const transaction = await Transaction.findByPk(transactionId, {
+    // Find the transaction
+    const transaction = await Transaction.findOne({
+      where: { invoice_no },
       include: [{ model: Ticket, as: "ticket" }],
     });
+
     if (!transaction) {
       return res.status(404).json({ message: "Transaction not found" });
     }
 
-    // Update transaction fields
-    const updateData: any = {
-      adult_count: req.body.adult_count ?? transaction.adult_count,
-      child_count: req.body.child_count ?? transaction.child_count,
-      category: req.body.category ?? transaction.category,
-      total_paid: req.body.total_paid ?? transaction.total_paid,
-      date: req.body.date ? new Date(req.body.date) : transaction.date,
-    };
+    const ticketId = transaction.ticket_id;
+    const isSpecial = invoice_no.startsWith("SPT");
 
-    // Update associated ticket if show_name or price is provided
-    if (req.body.show_name || req.body.total_paid) {
-      const ticket = transaction.ticket;
-      if (ticket) {
-        await ticket.update({
-          show_name: req.body.show_name ?? ticket.show_name,
-          price: req.body.total_paid ?? ticket.price,
-          category: req.body.category ?? ticket.category,
-        });
+    // Delete associated UserTicket or SpecialTicket if it exists
+    if (invoice_no.startsWith("TKT") || invoice_no.startsWith("SPT")) {
+      if (isSpecial) {
+        await SpecialTicket.destroy({ where: { invoice_no } });
       } else {
-        return res.status(400).json({ message: "Associated ticket not found" });
+        await UserTicket.destroy({ where: { invoice_no } });
       }
     }
 
-    await transaction.update(updateData);
+    // Delete the transaction
+    await Transaction.destroy({ where: { invoice_no } });
+
+    // Delete the ticket
+    await Ticket.destroy({ where: { id: ticketId } });
 
     res.json({
-      message: "Transaction updated successfully",
-      transaction: {
-        id: transaction.id,
-        invoice_no: transaction.invoice_no,
-        date: transaction.date,
-        adult_count: transaction.adult_count,
-        child_count: transaction.child_count,
-        category: transaction.category,
-        total_paid: transaction.total_paid,
-        ticket_id: transaction.ticket_id,
-        counter_id: transaction.counter_id,
-        show_name: transaction.ticket?.show_name,
-      },
+      message: "Transaction and associated ticket deleted successfully",
     });
   } catch (error) {
-    console.error("Error in updateTransaction:", error);
+    console.error("Error in deleteCalendarTransaction:", error);
     res.status(500).json({ message: "Internal server error" });
   }
 };
 
-export const deleteTransaction = async (req: Request, res: Response) => {
+// NEW: Update transaction and associated ticket
+// FILE: controllers/analyticsController.ts (update the updateCalendarTransaction function)
+export const updateCalendarTransaction = async (
+  req: Request,
+  res: Response
+) => {
   try {
-    const { id } = req.params;
+    const { invoice_no } = req.params;
+    const updates = req.body;
 
-    // Validate and convert id to number
-    const transactionId = parseInt(id, 10);
-    if (isNaN(transactionId)) {
-      return res.status(400).json({ message: "Invalid transaction ID" });
+    if (!invoice_no) {
+      return res.status(400).json({ message: "Invoice number is required" });
     }
 
-    const transaction = await Transaction.findByPk(transactionId);
+    // Find the transaction
+    const transaction = await Transaction.findOne({
+      where: { invoice_no },
+      include: [{ model: Ticket, as: "ticket" }],
+    });
+
     if (!transaction) {
       return res.status(404).json({ message: "Transaction not found" });
     }
 
-    // Optionally delete the associated ticket
-    if (transaction.ticket_id) {
-      await Ticket.destroy({ where: { id: transaction.ticket_id } });
+    const isSpecial = invoice_no.startsWith("SPT");
+
+    // Update the transaction
+    if (updates.adult_count !== undefined) {
+      await transaction.update({ adult_count: updates.adult_count });
     }
 
-    // Delete the transaction
-    await transaction.destroy();
+    if (updates.child_count !== undefined) {
+      await transaction.update({ child_count: updates.child_count });
+    }
 
-    res.json({ message: "Transaction deleted successfully" });
+    if (updates.category !== undefined) {
+      await transaction.update({ category: updates.category });
+    }
+
+    if (updates.total_paid !== undefined) {
+      await transaction.update({ total_paid: updates.total_paid });
+    }
+
+    if (updates.date !== undefined) {
+      await transaction.update({ date: new Date(updates.date) });
+    }
+
+    // Update the associated ticket
+    const ticketUpdates: any = {};
+    if (updates.price !== undefined) {
+      ticketUpdates.price = updates.price;
+    }
+
+    if (updates.ticket_type !== undefined) {
+      ticketUpdates.ticket_type = updates.ticket_type;
+    }
+
+    if (updates.show_name !== undefined) {
+      ticketUpdates.show_name = updates.show_name;
+    }
+
+    if (Object.keys(ticketUpdates).length > 0) {
+      await Ticket.update(ticketUpdates, {
+        where: { id: transaction.ticket_id },
+      });
+    }
+
+    // Update UserTicket or SpecialTicket if it exists
+    if (invoice_no.startsWith("TKT") || invoice_no.startsWith("SPT")) {
+      const userTicketUpdates: any = {};
+
+      if (updates.vehicle_type !== undefined) {
+        userTicketUpdates.vehicle_type = updates.vehicle_type;
+      }
+
+      if (updates.guide_name !== undefined) {
+        userTicketUpdates.guide_name = updates.guide_name;
+      }
+
+      if (updates.guide_number !== undefined) {
+        userTicketUpdates.guide_number = updates.guide_number;
+      }
+
+      if (updates.show_name !== undefined) {
+        userTicketUpdates.show_name = updates.show_name;
+      }
+
+      if (updates.adults !== undefined) {
+        userTicketUpdates.adults = updates.adults;
+      }
+
+      if (updates.ticket_price !== undefined) {
+        userTicketUpdates.ticket_price = updates.ticket_price;
+      }
+
+      if (updates.total_price !== undefined) {
+        userTicketUpdates.total_price = updates.total_price;
+      }
+
+      if (updates.tax !== undefined) {
+        userTicketUpdates.tax = updates.tax;
+      }
+
+      if (updates.final_amount !== undefined) {
+        userTicketUpdates.final_amount = updates.final_amount;
+      }
+
+      if (Object.keys(userTicketUpdates).length > 0) {
+        if (isSpecial) {
+          await SpecialTicket.update(userTicketUpdates, {
+            where: { invoice_no },
+          });
+        } else {
+          await UserTicket.update(userTicketUpdates, { where: { invoice_no } });
+        }
+      }
+    }
+
+    // Fetch the updated transaction with associations
+    const updatedTransaction = await Transaction.findOne({
+      where: { invoice_no },
+      include: [
+        { model: Ticket, as: "ticket" },
+        { model: Counter, as: "counter", attributes: ["id", "username"] },
+      ],
+    });
+
+    let userTicketData = {};
+    if (invoice_no.startsWith("TKT") || invoice_no.startsWith("SPT")) {
+      const isSpecial = invoice_no.startsWith("SPT");
+      const userTicket = isSpecial
+        ? await SpecialTicket.findOne({ where: { invoice_no } })
+        : await UserTicket.findOne({ where: { invoice_no } });
+
+      if (userTicket) {
+        userTicketData = {
+          vehicle_type: userTicket.vehicle_type,
+          guide_name: userTicket.guide_name,
+          guide_number: userTicket.guide_number,
+          adults: userTicket.adults,
+          ticket_price: userTicket.ticket_price,
+          total_price: userTicket.total_price,
+          tax: userTicket.tax,
+          final_amount: userTicket.final_amount,
+          status: userTicket.status,
+        };
+      }
+    }
+
+    // Create a properly typed response
+    const responseData: any = {
+      message: "Transaction updated successfully",
+      transaction: {
+        ...updatedTransaction?.toJSON(),
+      },
+    };
+
+    // Add ticket data if it exists
+    if (updatedTransaction && (updatedTransaction as any).ticket) {
+      responseData.transaction.ticket = {
+        ...(updatedTransaction as any).ticket.toJSON(),
+        ...userTicketData,
+      };
+    }
+
+    res.json(responseData);
   } catch (error) {
-    console.error("Error in deleteTransaction:", error);
+    console.error("Error in updateCalendarTransaction:", error);
     res.status(500).json({ message: "Internal server error" });
   }
 };

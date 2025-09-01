@@ -9,7 +9,6 @@ import { Op } from "sequelize";
 export const getUserGuides = async (req: Request, res: Response) => {
   try {
     const { search, status, vehicle_type } = req.query;
-
     let whereClause: any = {};
 
     if (search) {
@@ -55,7 +54,6 @@ export const getUserGuides = async (req: Request, res: Response) => {
 export const getUserGuide = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-
     const guide = await UserGuide.findByPk(id);
 
     if (!guide) {
@@ -96,7 +94,6 @@ export const createUserGuide = async (req: Request, res: Response) => {
       status,
     } = req.body;
 
-    // Check if guide with same number already exists
     const existingGuide = await UserGuide.findOne({ where: { number } });
     if (existingGuide) {
       return res
@@ -112,6 +109,8 @@ export const createUserGuide = async (req: Request, res: Response) => {
       total_bookings: total_bookings || 0,
       rating: rating || 0.0,
       status: status || "active",
+      created_at: new Date(), // Explicitly set created_at
+      updated_at: new Date(), // Explicitly set updated_at
     });
 
     res.status(201).json({
@@ -133,7 +132,6 @@ export const createUserGuide = async (req: Request, res: Response) => {
     res.status(500).json({ message: "Internal server error" });
   }
 };
-
 export const updateUserGuide = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
@@ -147,7 +145,6 @@ export const updateUserGuide = async (req: Request, res: Response) => {
       return res.status(404).json({ message: "Guide not found" });
     }
 
-    // If number is being updated, check if it conflicts with another guide
     if (req.body.number && req.body.number !== guide.number) {
       const existingGuide = await UserGuide.findOne({
         where: { number: req.body.number },
@@ -160,7 +157,6 @@ export const updateUserGuide = async (req: Request, res: Response) => {
     }
 
     await guide.update(req.body);
-
     res.json({
       message: "Guide updated successfully",
       guide: {
@@ -184,14 +180,12 @@ export const updateUserGuide = async (req: Request, res: Response) => {
 export const deleteUserGuide = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-
     const guide = await UserGuide.findByPk(id);
     if (!guide) {
       return res.status(404).json({ message: "Guide not found" });
     }
 
     await guide.destroy();
-
     res.json({ message: "Guide deleted successfully" });
   } catch (error) {
     console.error("Error in delete user guide:", error);
@@ -202,7 +196,6 @@ export const deleteUserGuide = async (req: Request, res: Response) => {
 export const getTopPerformers = async (req: Request, res: Response) => {
   try {
     const { limit = 3 } = req.query;
-
     const topPerformers = await UserGuide.findAll({
       where: { status: "active" },
       order: [["score", "DESC"]],

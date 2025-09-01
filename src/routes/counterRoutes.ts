@@ -1,4 +1,3 @@
-// src/routes/counterRoutes.ts
 import express from "express";
 import {
   addCounter,
@@ -7,14 +6,14 @@ import {
   registerAdmin,
   changePassword,
 } from "../controllers/counterController";
-import { authenticate, authorize } from "../middlewares/authMiddleware";
+import { authenticateJWT, authorizeAdmin } from "../middlewares/authMiddleware";
 
 const router = express.Router();
 
-router.get("/", authenticate, getCounters); // Accessible to both manager and admin
-router.post("/", authenticate, authorize(["admin"]), addCounter);
-router.delete("/:id", authenticate, authorize(["admin"]), deleteCounter);
-router.post("/register", authenticate, authorize(["admin"]), registerAdmin);
-router.put("/change-password", authenticate, changePassword); // Allow any authenticated user to change their own password
+router.post("/", authenticateJWT, authorizeAdmin, addCounter);
+router.delete("/:username", authenticateJWT, authorizeAdmin, deleteCounter); // Changed :id to :username
+router.get("/", authenticateJWT, authorizeAdmin, getCounters);
+router.post("/register", authenticateJWT, authorizeAdmin, registerAdmin);
+router.put("/password", authenticateJWT, changePassword);
 
 export default router;

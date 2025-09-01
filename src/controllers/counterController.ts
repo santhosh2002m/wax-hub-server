@@ -1,7 +1,7 @@
-// src/controllers/counterController.ts
 import { Request, Response } from "express";
 import Counter from "../models/counterModel";
 import Transaction from "../models/transactionModel";
+import Message from "../models/messageModel";
 import bcrypt from "bcryptjs";
 import { counterSchema } from "../schemas/counterSchema";
 
@@ -11,17 +11,25 @@ export const addCounter = async (req: Request, res: Response) => {
     if (error)
       return res.status(400).json({ message: error.details[0].message });
 
-    const { username, password } = req.body;
+    const { username, password, special, role } = req.body;
+
+    const existingCounter = await Counter.findOne({ where: { username } });
+    if (existingCounter) {
+      return res.status(400).json({ message: "Username already exists" });
+    }
+
     const hashedPassword = bcrypt.hashSync(password, 10);
     const counter = await Counter.create({
       username,
       password: hashedPassword,
-      role: "manager", // Explicitly sets role to manager
+      role: role || "manager",
+      special: special || false,
     });
     res.status(201).json({
       id: counter.id,
       username: counter.username,
       role: counter.role,
+      special: counter.special,
       createdAt: counter.createdAt,
     });
   } catch (error) {
@@ -32,18 +40,26 @@ export const addCounter = async (req: Request, res: Response) => {
 
 export const deleteCounter = async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
-    const counter = await Counter.findByPk(id);
+    const { username } = req.params;
+    const counter = await Counter.findOne({ where: { username } });
     if (!counter) return res.status(404).json({ message: "Counter not found" });
 
-    // First, set counter_id to NULL in all associated transactions
+    if (counter.username === "special_counter") {
+      return res
+        .status(403)
+        .json({ message: "Cannot delete the special counter" });
+    }
+
+    // First delete associated messages instead of setting counter_id to null
+    await Message.destroy({ where: { counter_id: counter.id } });
+
+    // Set counter_id to null in transactions table
     await Transaction.update(
       { counter_id: null },
-      { where: { counter_id: id } }
+      { where: { counter_id: counter.id } }
     );
 
-    // Then delete the counter
-    await Counter.destroy({ where: { id } });
+    await Counter.destroy({ where: { username } });
     res.json({ message: "Counter deleted successfully" });
   } catch (error) {
     console.error("Error in deleteCounter:", error);
@@ -69,32 +85,33 @@ export const registerAdmin = async (req: Request, res: Response) => {
     if (error)
       return res.status(400).json({ message: error.details[0].message });
 
-    const { username, password, role } = req.body;
+    const { username, password, role, special } = req.body;
 
     const existingUser = await Counter.findOne({ where: { username } });
     if (existingUser) {
-      return res.status(400).json({ message: "User already exists" });
+      return res.status(400).json({ message: "Username already exists" });
     }
 
-    const validRoles = ["admin", "manager"];
+    const validRoles = ["admin", "manager", "user"];
     if (role && !validRoles.includes(role)) {
       return res
         .status(400)
-        .json({ message: "Role must be 'admin' or 'manager'" });
+        .json({ message: "Role must be 'admin', 'manager', or 'user'" });
     }
 
     const hashedPassword = bcrypt.hashSync(password, 10);
     const counter = await Counter.create({
       username,
       password: hashedPassword,
-      role: role || "manager", // Default to manager if no role is provided
+      role: role || "manager",
+      special: special || false,
     });
 
-    const message = `User created successfully (role: ${counter.role})`;
     res.status(201).json({
-      message,
+      message: `User created successfully (role: ${counter.role})`,
       username: counter.username,
       role: counter.role,
+      special: counter.special,
       createdAt: counter.createdAt,
     });
   } catch (error) {
@@ -113,7 +130,6 @@ export const changePassword = async (req: Request, res: Response) => {
       newPassword: string;
     };
 
-    // Validate new password length
     if (newPassword.length < 6) {
       return res
         .status(400)
@@ -136,5 +152,25 @@ export const changePassword = async (req: Request, res: Response) => {
   } catch (error) {
     console.error("Error in changePassword:", error);
     res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+export const createSpecialCounter = async () => {
+  try {
+    const username = "special_counter";
+    const password = "SpecialPass123!";
+    const existingCounter = await Counter.findOne({ where: { username } });
+    if (!existingCounter) {
+      const hashedPassword = bcrypt.hashSync(password, 10);
+      await Counter.create({
+        username,
+        password: hashedPassword,
+        role: "user",
+        special: true,
+      });
+      console.log("Special counter created with username: special_counter");
+    }
+  } catch (error) {
+    console.error("Error creating special counter:", error);
   }
 };

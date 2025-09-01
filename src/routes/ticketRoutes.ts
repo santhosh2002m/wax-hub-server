@@ -1,18 +1,27 @@
-// src/routes/ticketRoutes.ts
 import express from "express";
 import {
   getTickets,
   addTicket,
   updateTicket,
   deleteTicket,
+  getTicketById,
 } from "../controllers/ticketController";
-import { authenticate, authorize } from "../middlewares/authMiddleware";
+import {
+  authenticateJWT,
+  authorizeAdmin,
+  authorizeAdminOrUser,
+  authorizeAdminOrManager,
+} from "../middlewares/authMiddleware";
 
 const router = express.Router();
 
-router.get("/", authenticate, getTickets); // Accessible to both manager and admin
-router.post("/", authenticate, authorize(["admin"]), addTicket);
-router.put("/:id", authenticate, authorize(["admin"]), updateTicket);
-router.delete("/:id", authenticate, authorize(["admin"]), deleteTicket);
+// Allow both admin and user to read tickets
+router.get("/", authenticateJWT, authorizeAdminOrUser, getTickets);
+router.get("/:id", authenticateJWT, authorizeAdminOrUser, getTicketById);
+
+// Only admin and managers can modify tickets
+router.post("/", authenticateJWT, authorizeAdminOrManager, addTicket);
+router.put("/:id", authenticateJWT, authorizeAdminOrManager, updateTicket);
+router.delete("/:id", authenticateJWT, authorizeAdminOrManager, deleteTicket);
 
 export default router;

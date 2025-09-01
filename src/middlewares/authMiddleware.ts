@@ -1,35 +1,95 @@
-// src/middlewares/authMiddleware.ts
+// middlewares/authMiddleware.ts
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 
-export const authenticate = (
+interface AuthenticatedUser {
+  id: number;
+  username: string;
+  role: string;
+}
+
+export const authenticateJWT = (
   req: Request,
   res: Response,
   next: NextFunction
 ) => {
   const token = req.headers.authorization?.split(" ")[1];
-  if (!token) return res.status(401).json({ message: "No token provided" });
+  if (!token) {
+    return res.status(401).json({ message: "Access token is missing" });
+  }
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as {
-      id: number;
-      username: string;
-      role: "manager" | "admin";
-      [key: string]: any;
-    };
-    (req as any).user = decoded; // Use type assertion here
+    const decoded = jwt.verify(
+      token,
+      process.env.JWT_SECRET as string
+    ) as AuthenticatedUser;
+    (req as any).user = decoded;
     next();
-  } catch (err) {
-    res.status(401).json({ message: "Invalid token" });
+  } catch (error) {
+    return res.status(403).json({ message: "Invalid or expired token" });
   }
 };
 
-export const authorize = (roles: string[]) => {
-  return (req: Request, res: Response, next: NextFunction) => {
-    const user = (req as any).user;
-    if (!user || !roles.includes(user.role)) {
-      return res.status(403).json({ message: "Forbidden" });
-    }
-    next();
-  };
+export const authorizeAdmin = (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  const user = (req as any).user as AuthenticatedUser;
+  if (user.role !== "admin") {
+    return res.status(403).json({ message: "Admin access required" });
+  }
+  next();
+};
+
+export const authorizeManager = (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  const user = (req as any).user as AuthenticatedUser;
+  if (user.role !== "manager" && user.role !== "admin") {
+    return res
+      .status(403)
+      .json({ message: "Manager or admin access required" });
+  }
+  next();
+};
+
+export const authorizeUser = (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  const user = (req as any).user as AuthenticatedUser;
+  if (user.role !== "user" && user.role !== "admin") {
+    return res.status(403).json({ message: "User or admin access required" });
+  }
+  next();
+};
+
+export const authorizeAdminOrUser = (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  const user = (req as any).user as AuthenticatedUser;
+  if (user.role !== "admin" && user.role !== "user") {
+    return res.status(403).json({ message: "Admin or user access required" });
+  }
+  next();
+};
+
+export const authorizeAdminOrManager = (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  const user = (req as any).user as AuthenticatedUser;
+  if (user.role !== "admin" && user.role !== "manager") {
+    return res
+      .status(403)
+      .json({ message: "Admin or manager access required" });
+  }
+  next();
 };

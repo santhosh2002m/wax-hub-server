@@ -34,6 +34,8 @@ module.exports = {
     });
   },
   down: async (queryInterface: QueryInterface, Sequelize: typeof DataTypes) => {
-    await queryInterface.dropTable("users");
+    // Drop user_tickets table first to remove foreign key dependency
+    await queryInterface.dropTable("user_tickets", { cascade: true });
+    await queryInterface.dropTable("users", { cascade: true });
   },
 };

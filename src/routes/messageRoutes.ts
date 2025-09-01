@@ -1,13 +1,15 @@
 import express from "express";
 import {
-  sendCustomMessage,
-  getSentMessages,
+  getMessages,
+  addMessage,
+  deleteMessage,
 } from "../controllers/messageController";
-import { authenticate, authorize } from "../middlewares/authMiddleware";
+import { authenticateJWT, authorizeAdmin } from "../middlewares/authMiddleware";
 
 const router = express.Router();
 
-router.post("/send", authenticate, authorize(["admin"]), sendCustomMessage);
-router.get("/sent", authenticate, authorize(["admin"]), getSentMessages);
+router.get("/", authenticateJWT, authorizeAdmin, getMessages);
+router.post("/", authenticateJWT, addMessage);
+router.delete("/:id", authenticateJWT, authorizeAdmin, deleteMessage);
 
 export default router;

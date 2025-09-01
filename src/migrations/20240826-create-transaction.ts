@@ -1,54 +1,35 @@
-// migrations/20240826-create-transaction.ts
 import { QueryInterface, DataTypes } from "sequelize";
 
-export = {
+module.exports = {
   up: async (queryInterface: QueryInterface, Sequelize: typeof DataTypes) => {
-    await queryInterface.createTable("Transactions", {
+    await queryInterface.createTable("transactions", {
       id: {
         allowNull: false,
         autoIncrement: true,
         primaryKey: true,
         type: Sequelize.INTEGER,
       },
-      invoice_no: {
-        type: Sequelize.STRING(50),
-        unique: true,
-      },
-      date: {
-        type: Sequelize.DATE,
-        allowNull: false,
-      },
-      adult_count: {
-        type: Sequelize.INTEGER,
-        defaultValue: 1,
-      },
-      total_paid: {
-        type: Sequelize.INTEGER,
-        allowNull: false,
-      },
+      invoice_no: { type: Sequelize.STRING, allowNull: false, unique: true },
+      date: { type: Sequelize.DATE, allowNull: false },
+      adult_count: { type: Sequelize.INTEGER, allowNull: false },
+      child_count: { type: Sequelize.INTEGER, allowNull: false },
+      category: { type: Sequelize.STRING, allowNull: false },
+      total_paid: { type: Sequelize.FLOAT, allowNull: false },
       ticket_id: {
         type: Sequelize.INTEGER,
-        references: { model: "Tickets", key: "id" },
-        onUpdate: "CASCADE",
-        onDelete: "SET NULL",
+        allowNull: false,
+        references: { model: "tickets", key: "id" },
       },
       counter_id: {
         type: Sequelize.INTEGER,
+        allowNull: true,
         references: { model: "counters", key: "id" },
-        onUpdate: "CASCADE",
-        onDelete: "SET NULL",
       },
-      createdAt: {
-        allowNull: false,
-        type: Sequelize.DATE,
-      },
-      updatedAt: {
-        allowNull: false,
-        type: Sequelize.DATE,
-      },
+      createdAt: { allowNull: false, type: Sequelize.DATE },
+      updatedAt: { allowNull: false, type: Sequelize.DATE },
     });
   },
-  down: async (queryInterface: QueryInterface, Sequelize: typeof DataTypes) => {
-    await queryInterface.dropTable("Transactions");
+  down: async (queryInterface: QueryInterface) => {
+    await queryInterface.dropTable("transactions");
   },
 };
