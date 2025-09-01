@@ -94,32 +94,41 @@ export const getTodayOverview = async (req: Request, res: Response) => {
     const todayEnd = endOfDay(now);
     const yesterdayEnd = endOfDay(subtractDays(now, 1));
 
-    // Include ALL tickets (both admin and user created)
+    // For ticket counts and amounts, keep the is_analytics filter
     const whereClause: WhereOptions = {
       createdAt: { [Op.gte]: today, [Op.lte]: todayEnd },
+      is_analytics: true, // Keep this for ticket counts
     };
+
     const yesterdayWhere: WhereOptions = {
       createdAt: { [Op.gte]: yesterday, [Op.lte]: yesterdayEnd },
+      is_analytics: true, // Keep this for ticket counts
+    };
+
+    // For attractions/guide scores, use a separate where clause WITHOUT is_analytics filter
+    const attractionsWhereClause: WhereOptions = {
+      createdAt: { [Op.gte]: today, [Op.lte]: todayEnd },
+      // NO is_analytics filter here - include ALL tickets
     };
 
     const todayTickets = await Ticket.count({
-      where: whereClause,
+      where: whereClause, // With is_analytics filter
       ...includeCounter,
     });
     const yesterdayTickets = await Ticket.count({
-      where: yesterdayWhere,
+      where: yesterdayWhere, // With is_analytics filter
       ...includeCounter,
     });
     const ticketGrowth = calculateGrowth(todayTickets, yesterdayTickets);
 
     const todayAmount =
       (await Ticket.sum("price", {
-        where: whereClause,
+        where: whereClause, // With is_analytics filter
         ...includeCounter,
       })) || 0;
     const yesterdayAmount =
       (await Ticket.sum("price", {
-        where: yesterdayWhere,
+        where: yesterdayWhere, // With is_analytics filter
         ...includeCounter,
       })) || 0;
     const amountGrowth = calculateGrowth(todayAmount, yesterdayAmount);
@@ -128,14 +137,16 @@ export const getTodayOverview = async (req: Request, res: Response) => {
     const activeVisitors = await Ticket.count({
       where: {
         createdAt: { [Op.gte]: oneHourAgo },
+        is_analytics: true, // Keep filter for active visitors
       },
       ...includeCounter,
     });
 
+    // For attractions, use the filter WITHOUT is_analytics to include ALL tickets
     const attractions = (await Ticket.findAll({
       attributes: [[fn("SUM", col("price")), "total"], "show_name"],
       group: ["show_name"],
-      where: whereClause,
+      where: attractionsWhereClause, // NO is_analytics filter - include ALL tickets
       ...includeCounter,
       raw: true,
     })) as unknown as AttractionResult[];
@@ -154,6 +165,7 @@ export const getTodayOverview = async (req: Request, res: Response) => {
         const count = await Ticket.count({
           where: {
             createdAt: { [Op.gte]: hourStart, [Op.lt]: hourEnd },
+            is_analytics: true, // Keep filter for chart data
           },
           ...includeCounter,
         });
@@ -167,7 +179,7 @@ export const getTodayOverview = async (req: Request, res: Response) => {
       activeVisitors,
       revenueGrowth: amountGrowth.toFixed(2),
       ticketGrowth: ticketGrowth.toFixed(2),
-      attractions,
+      attractions, // This now includes ALL tickets (both admin and user)
       chartData,
     });
   } catch (error) {
@@ -184,12 +196,20 @@ export const getLast7Days = async (req: Request, res: Response) => {
     const previousStart = startOfDay(subtractDays(now, 13));
     const previousEnd = endOfDay(subtractDays(now, 7));
 
-    // Include ALL tickets
+    // For ticket counts and amounts, keep the is_analytics filter
     const whereClause: WhereOptions = {
       createdAt: { [Op.gte]: start, [Op.lte]: end },
+      is_analytics: true,
     };
     const previousWhere: WhereOptions = {
       createdAt: { [Op.gte]: previousStart, [Op.lte]: previousEnd },
+      is_analytics: true,
+    };
+
+    // For attractions, use a separate where clause WITHOUT is_analytics filter
+    const attractionsWhereClause: WhereOptions = {
+      createdAt: { [Op.gte]: start, [Op.lte]: end },
+      // NO is_analytics filter here - include ALL tickets
     };
 
     const totalTickets = await Ticket.count({
@@ -226,6 +246,7 @@ export const getLast7Days = async (req: Request, res: Response) => {
         const count = await Ticket.count({
           where: {
             createdAt: { [Op.gte]: dayStart, [Op.lte]: dayEnd },
+            is_analytics: true, // Keep filter for chart data
           },
           ...includeCounter,
         });
@@ -233,10 +254,11 @@ export const getLast7Days = async (req: Request, res: Response) => {
       })
     );
 
+    // For attractions, use the filter WITHOUT is_analytics to include ALL tickets
     const attractions = (await Ticket.findAll({
       attributes: [[fn("SUM", col("price")), "total"], "show_name"],
       group: ["show_name"],
-      where: whereClause,
+      where: attractionsWhereClause, // NO is_analytics filter - include ALL tickets
       ...includeCounter,
       raw: true,
     })) as unknown as AttractionResult[];
@@ -246,7 +268,7 @@ export const getLast7Days = async (req: Request, res: Response) => {
       totalAmount: `₹${totalAmount}`,
       ticketGrowth: ticketGrowth.toFixed(2),
       revenueGrowth: amountGrowth.toFixed(2),
-      attractions,
+      attractions, // This now includes ALL tickets (both admin and user)
       chartData,
     });
   } catch (error) {
@@ -263,12 +285,20 @@ export const getLast30Days = async (req: Request, res: Response) => {
     const previousStart = startOfDay(subtractDays(now, 59));
     const previousEnd = endOfDay(subtractDays(now, 30));
 
-    // Include ALL tickets
+    // For ticket counts and amounts, keep the is_analytics filter
     const whereClause: WhereOptions = {
       createdAt: { [Op.gte]: start, [Op.lte]: end },
+      is_analytics: true,
     };
     const previousWhere: WhereOptions = {
       createdAt: { [Op.gte]: previousStart, [Op.lte]: previousEnd },
+      is_analytics: true,
+    };
+
+    // For attractions, use a separate where clause WITHOUT is_analytics filter
+    const attractionsWhereClause: WhereOptions = {
+      createdAt: { [Op.gte]: start, [Op.lte]: end },
+      // NO is_analytics filter here - include ALL tickets
     };
 
     const totalTickets = await Ticket.count({
@@ -305,6 +335,7 @@ export const getLast30Days = async (req: Request, res: Response) => {
         const count = await Ticket.count({
           where: {
             createdAt: { [Op.gte]: dayStart, [Op.lte]: dayEnd },
+            is_analytics: true, // Keep filter for chart data
           },
           ...includeCounter,
         });
@@ -312,10 +343,11 @@ export const getLast30Days = async (req: Request, res: Response) => {
       })
     );
 
+    // For attractions, use the filter WITHOUT is_analytics to include ALL tickets
     const attractions = (await Ticket.findAll({
       attributes: [[fn("SUM", col("price")), "total"], "show_name"],
       group: ["show_name"],
-      where: whereClause,
+      where: attractionsWhereClause, // NO is_analytics filter - include ALL tickets
       ...includeCounter,
       raw: true,
     })) as unknown as AttractionResult[];
@@ -325,7 +357,7 @@ export const getLast30Days = async (req: Request, res: Response) => {
       totalAmount: `₹${totalAmount}`,
       ticketGrowth: ticketGrowth.toFixed(2),
       revenueGrowth: amountGrowth.toFixed(2),
-      attractions,
+      attractions, // This now includes ALL tickets (both admin and user)
       chartData,
     });
   } catch (error) {
@@ -342,12 +374,20 @@ export const getAnnualPerformance = async (req: Request, res: Response) => {
     const previousStart = startOfYear(subtractYears(now, 1));
     const previousEnd = endOfYear(subtractYears(now, 1));
 
-    // Include ALL tickets
+    // For ticket counts and amounts, keep the is_analytics filter
     const whereClause: WhereOptions = {
       createdAt: { [Op.gte]: start, [Op.lte]: end },
+      is_analytics: true,
     };
     const previousWhere: WhereOptions = {
       createdAt: { [Op.gte]: previousStart, [Op.lte]: previousEnd },
+      is_analytics: true,
+    };
+
+    // For attractions, use a separate where clause WITHOUT is_analytics filter
+    const attractionsWhereClause: WhereOptions = {
+      createdAt: { [Op.gte]: start, [Op.lte]: end },
+      // NO is_analytics filter here - include ALL tickets
     };
 
     const totalTickets = await Ticket.count({
@@ -384,6 +424,7 @@ export const getAnnualPerformance = async (req: Request, res: Response) => {
         const count = await Ticket.count({
           where: {
             createdAt: { [Op.gte]: monthStart, [Op.lte]: monthEnd },
+            is_analytics: true, // Keep filter for chart data
           },
           ...includeCounter,
         });
@@ -391,10 +432,11 @@ export const getAnnualPerformance = async (req: Request, res: Response) => {
       })
     );
 
+    // For attractions, use the filter WITHOUT is_analytics to include ALL tickets
     const attractions = (await Ticket.findAll({
       attributes: [[fn("SUM", col("price")), "total"], "show_name"],
       group: ["show_name"],
-      where: whereClause,
+      where: attractionsWhereClause, // NO is_analytics filter - include ALL tickets
       ...includeCounter,
       raw: true,
     })) as unknown as AttractionResult[];
@@ -404,7 +446,7 @@ export const getAnnualPerformance = async (req: Request, res: Response) => {
       totalAmount: `₹${totalAmount}`,
       ticketGrowth: ticketGrowth.toFixed(2),
       revenueGrowth: amountGrowth.toFixed(2),
-      attractions,
+      attractions, // This now includes ALL tickets (both admin and user)
       chartData,
     });
   } catch (error) {
@@ -423,8 +465,9 @@ export const getCalendarView = async (req: Request, res: Response) => {
         .json({ message: "startDate and endDate are required" });
     }
 
+    // FIXED: Removed is_analytics from the date filter
     const whereClause: WhereOptions = {
-      createdAt: {
+      date: {
         [Op.gte]: new Date(startDate as string),
         [Op.lte]: new Date(endDate as string),
       },
@@ -436,7 +479,6 @@ export const getCalendarView = async (req: Request, res: Response) => {
         {
           model: Ticket,
           as: "ticket",
-          // Include ALL tickets (both admin and user)
         },
         { model: Counter, as: "counter", attributes: ["id", "username"] },
       ],

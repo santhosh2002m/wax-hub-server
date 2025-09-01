@@ -1,4 +1,3 @@
-// Helper function to update guide stats or create guide if not exists
 // FILE: controllers/userTicketController.ts
 import { Request, Response } from "express";
 import UserTicket from "../models/userticketModel";
@@ -6,34 +5,104 @@ import { userTicketSchema } from "../schemas/userSchema";
 import { Op } from "sequelize";
 import Ticket from "../models/ticketModel";
 import Transaction from "../models/transactionModel";
-import UserGuide from "../models/userGuideModel";
 import Counter from "../models/counterModel";
+import UserGuide from "../models/userGuideModel";
 import { v4 as uuidv4 } from "uuid";
 
-// Helper function to update guide stats or create guide if not exists
-const updateGuideStats = async (guide_name: string, adults: number) => {
-  if (guide_name && guide_name !== "N/A") {
-    let guide = await UserGuide.findOne({ where: { name: guide_name } });
+interface AuthenticatedUser {
+  id: number;
+  username: string;
+  role?: string;
+}
 
-    if (!guide) {
-      // Create a new guide if it doesn't exist
-      guide = await UserGuide.create({
-        name: guide_name,
-        number: "N/A",
-        vehicle_type: "Unknown",
-        score: 0,
-        total_bookings: 0,
-        rating: 0.0,
-        status: "active",
-        created_at: new Date(),
-        updated_at: new Date(),
-      });
+// Helper function to calculate guide rating
+const calculateGuideRating = (totalBookings: number): number => {
+  if (totalBookings > 50) return 4.8;
+  if (totalBookings > 20) return 4.5;
+  if (totalBookings > 10) return 4.2;
+  return 4.0;
+};
+
+// Helper function to update guide stats or create guide if not exists
+const updateGuideStats = async (
+  guide_name: string,
+  guide_number: string,
+  vehicle_type: string,
+  adults: number,
+  transaction?: any
+) => {
+  try {
+    // Add proper validation - allow empty strings but not null/undefined
+    if (!guide_name || guide_name.trim() === "" || guide_name === "N/A") {
+      console.log('Guide name is empty or "N/A", skipping guide update');
+      return;
     }
 
-    // Update the guide's stats
-    guide.total_bookings += adults;
-    guide.score = guide.total_bookings * 10;
-    await guide.save();
+    console.log(`Updating guide stats for: "${guide_name}", adults: ${adults}`);
+
+    // Trim and normalize the guide name
+    const normalizedGuideName = guide_name.trim();
+    const normalizedGuideNumber = guide_number?.trim() || "N/A";
+    const normalizedVehicleType = vehicle_type?.trim() || "Unknown";
+
+    // First try to find guide by name (case-insensitive search)
+    let guide = await UserGuide.findOne({
+      where: {
+        name: {
+          [Op.iLike]: normalizedGuideName,
+        },
+      },
+      transaction,
+    });
+
+    if (!guide) {
+      console.log(`Creating new guide: "${normalizedGuideName}"`);
+      // Create a new guide if it doesn't exist
+      guide = await UserGuide.create(
+        {
+          name: normalizedGuideName,
+          number: normalizedGuideNumber,
+          vehicle_type: normalizedVehicleType,
+          score: adults * 10,
+          total_bookings: adults,
+          rating: calculateGuideRating(adults),
+          status: "active",
+          created_at: new Date(),
+          updated_at: new Date(),
+        },
+        { transaction }
+      );
+      console.log(
+        `Created new guide: "${normalizedGuideName}" with ID: ${guide.id}`
+      );
+    } else {
+      console.log(
+        `Found existing guide: "${normalizedGuideName}" (ID: ${guide.id})`
+      );
+      // Update existing guide's stats
+      const newTotalBookings = (guide.total_bookings || 0) + adults;
+      const newScore = (guide.score || 0) + adults * 10;
+
+      await UserGuide.update(
+        {
+          total_bookings: newTotalBookings,
+          score: newScore,
+          rating: calculateGuideRating(newTotalBookings),
+          updated_at: new Date(),
+        },
+        {
+          where: { id: guide.id },
+          transaction,
+        }
+      );
+
+      console.log(
+        `Updated guide: "${normalizedGuideName}", total bookings: ${newTotalBookings}, score: ${newScore}`
+      );
+    }
+  } catch (error) {
+    console.error("Error updating guide stats:", error);
+    // Don't throw error here to avoid breaking ticket creation
   }
 };
 
@@ -80,7 +149,7 @@ export const createUserTicket = async (req: Request, res: Response) => {
       });
     }
 
-    const user = (req as any).user as { id: number; username: string };
+    const user = (req as any).user as AuthenticatedUser;
     if (!user || !user.id) {
       await transaction.rollback();
       return res.status(401).json({ message: "Unauthorized: User not found" });
@@ -109,6 +178,15 @@ export const createUserTicket = async (req: Request, res: Response) => {
       counter_id: user.id,
       status: "completed" as const,
     };
+
+    // DEBUG: Log the incoming data
+    console.log("Creating ticket with data:", {
+      guide_name: ticketData.guide_name,
+      guide_number: ticketData.guide_number,
+      vehicle_type: ticketData.vehicle_type,
+      adults: ticketData.adults,
+      has_guide: !!ticketData.guide_name && ticketData.guide_name !== "N/A",
+    });
 
     // Create all related records within a transaction
     const [ticket, adminTicket] = await Promise.all([
@@ -139,15 +217,34 @@ export const createUserTicket = async (req: Request, res: Response) => {
       { transaction }
     );
 
+    // CRITICAL FIX: Update guide stats - this should happen AFTER ticket creation
+    // Remove the validation check - let the updateGuideStats function handle validation
+    if (ticketData.guide_name && ticketData.guide_name !== "N/A") {
+      try {
+        console.log(
+          `Attempting to update guide stats for: ${ticketData.guide_name}`
+        );
+        await updateGuideStats(
+          ticketData.guide_name,
+          ticketData.guide_number || "N/A",
+          ticketData.vehicle_type || "Unknown",
+          ticketData.adults,
+          transaction
+        );
+        console.log(
+          `Guide stats updated successfully for: ${ticketData.guide_name}`
+        );
+      } catch (guideError) {
+        console.error("Error updating guide stats:", guideError);
+        // Don't rollback the entire transaction if guide update fails
+        // The ticket creation should still succeed
+      }
+    } else {
+      console.log("No guide name provided, skipping guide update");
+    }
+
     // Commit the transaction
     await transaction.commit();
-
-    // Update guide stats (non-blocking, outside transaction)
-    if (ticket.guide_name && ticket.guide_name !== "N/A") {
-      updateGuideStats(ticket.guide_name, ticket.adults).catch((err) =>
-        console.error("Error updating guide stats:", err)
-      );
-    }
 
     res.status(201).json({
       message: "Ticket created successfully",
@@ -196,7 +293,7 @@ export const createUserTicket = async (req: Request, res: Response) => {
   }
 };
 
-// ... rest of the file remains the same
+// FILE: controllers/userTicketController.ts (update getUserTickets function)
 export const getUserTickets = async (req: Request, res: Response) => {
   try {
     const user = (req as any).user as {
@@ -209,14 +306,12 @@ export const getUserTickets = async (req: Request, res: Response) => {
     const limitNum = parseInt(limit as string, 10);
     const offset = (pageNum - 1) * limitNum;
 
-    // Get today's date range
+    // Get today's date range (only show today's tickets)
     const today = new Date();
     const startOfToday = new Date(today);
     startOfToday.setHours(0, 0, 0, 0);
     const endOfToday = new Date(today);
     endOfToday.setHours(23, 59, 59, 999);
-
-    // Only show tickets from today
 
     let whereClause: any = {
       user_id: user.id,

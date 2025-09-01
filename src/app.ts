@@ -16,6 +16,7 @@ import specialTicketRoutes from "./routes/specialTicketRoutes";
 import userAuthRoutes from "./routes/userAuthRoutes";
 import { createSpecialCounter } from "./controllers/counterController";
 import twilioRoutes from "./routes/twilioRoutes";
+import { scheduleDailyCleanup, cleanupOldTickets } from "./utils/dailyCleanup";
 
 dotenv.config();
 
@@ -43,11 +44,27 @@ app.use("/api/user/auth", userAuthRoutes);
 // Add this route registration (after other routes)
 app.use("/api/twilio", twilioRoutes);
 // Database sync and special counter creation
+// FILE: app.ts (add this after database sync)
+
+// Add this after database sync
 sequelize
   .sync({ alter: true })
   .then(async () => {
     console.log("Database synced");
     await createSpecialCounter(); // Create special counter on startup
+
+    // Schedule daily cleanup
+    scheduleDailyCleanup();
+
+    // Also run cleanup on startup to clear any old tickets
+    setTimeout(async () => {
+      try {
+        await cleanupOldTickets();
+        console.log("Initial cleanup completed");
+      } catch (error) {
+        console.error("Initial cleanup failed:", error);
+      }
+    }, 5000); // Wait 5 seconds after startup
   })
   .catch((err) => console.error("Database sync error:", err));
 

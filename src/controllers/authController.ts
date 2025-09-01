@@ -5,6 +5,7 @@ import jwt from "jsonwebtoken";
 import Counter from "../models/counterModel";
 import { loginSchema } from "../schemas/authSchema";
 
+// controllers/authController.ts - Update the login function
 export const login = async (req: Request, res: Response) => {
   try {
     const { error } = loginSchema.validate(req.body);
@@ -21,30 +22,35 @@ export const login = async (req: Request, res: Response) => {
       return res.status(401).json({ message: "Invalid credentials" });
     }
 
-    if (counter.role === "user") {
+    if (counter.role === "user" && !counter.special) {
       return res
         .status(403)
         .json({ message: "Use /api/user/auth/login for user dashboard" });
     }
 
     const token = jwt.sign(
-      { id: counter.id, username, role: counter.role },
+      {
+        id: counter.id,
+        username,
+        role: counter.role,
+        special: counter.special,
+      },
       process.env.JWT_SECRET as string,
-      { expiresIn: "1h" }
+      { expiresIn: "8h" } // Increased timeout for better user experience
     );
+
     res.status(200).json({
       token,
       username: counter.username,
       role: counter.role,
       createdAt: counter.createdAt,
-      special: counter.special,
+      special: counter.special, // Make sure this is included
     });
   } catch (error) {
     console.error("Error in login:", error);
     res.status(500).json({ message: "Internal server error" });
   }
 };
-
 export const editProfile = async (req: Request, res: Response) => {
   try {
     const user = (req as any).user as { id: number; username: string };

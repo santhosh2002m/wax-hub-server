@@ -4,11 +4,15 @@ import {
   addMessage,
   deleteMessage,
 } from "../controllers/messageController";
-import { authenticateJWT, authorizeAdmin } from "../middlewares/authMiddleware";
+import {
+  authenticateJWT,
+  authorizeAdmin,
+  authorizeAdminOrManager,
+} from "../middlewares/authMiddleware"; // Added authorizeAdminOrManager
 
 const router = express.Router();
 
-router.get("/", authenticateJWT, authorizeAdmin, getMessages);
+router.get("/", authenticateJWT, authorizeAdminOrManager, getMessages); // Changed to allow managers
 router.post("/", authenticateJWT, addMessage);
 router.delete("/:id", authenticateJWT, authorizeAdmin, deleteMessage);
 

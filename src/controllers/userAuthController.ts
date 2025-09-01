@@ -6,6 +6,7 @@ import Counter from "../models/counterModel"; // Use Counter instead of User
 import { userLoginSchema } from "../schemas/userSchema";
 
 // Make sure user login returns proper role information
+// controllers/userAuthController.ts - Update the userLogin function
 export const userLogin = async (req: Request, res: Response) => {
   try {
     const { error } = userLoginSchema.validate(req.body);
@@ -23,13 +24,18 @@ export const userLogin = async (req: Request, res: Response) => {
     if (
       !counter ||
       !bcrypt.compareSync(password, counter.password) ||
-      (counter.role !== "user" && counter.role !== "admin") // Allow both user and admin
+      (counter.role !== "user" && !counter.special) // Allow both user and special counters
     ) {
       return res.status(401).json({ message: "Invalid credentials" });
     }
 
     const token = jwt.sign(
-      { id: counter.id, username, role: counter.role },
+      {
+        id: counter.id,
+        username,
+        role: counter.role,
+        special: counter.special,
+      },
       process.env.JWT_SECRET as string,
       { expiresIn: "8h" }
     );
@@ -46,7 +52,6 @@ export const userLogin = async (req: Request, res: Response) => {
     res.status(500).json({ message: "Internal server error" });
   }
 };
-
 export const userRegister = async (req: Request, res: Response) => {
   try {
     const { error } = userLoginSchema.validate(req.body); // Reuse login schema for simplicity

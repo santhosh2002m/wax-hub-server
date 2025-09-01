@@ -1,4 +1,4 @@
-// middlewares/authMiddleware.ts
+// FILE: middlewares/authMiddleware.ts
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 
@@ -6,6 +6,7 @@ interface AuthenticatedUser {
   id: number;
   username: string;
   role: string;
+  special?: boolean;
 }
 
 export const authenticateJWT = (
@@ -48,12 +49,12 @@ export const authorizeManager = (
   next: NextFunction
 ) => {
   const user = (req as any).user as AuthenticatedUser;
-  if (user.role !== "manager" && user.role !== "admin") {
-    return res
-      .status(403)
-      .json({ message: "Manager or admin access required" });
+  if (user.role === "manager" || user.role === "admin" || user.special) {
+    return next();
   }
-  next();
+  return res
+    .status(403)
+    .json({ message: "Manager, admin, or special counter access required" });
 };
 
 export const authorizeUser = (
@@ -62,8 +63,10 @@ export const authorizeUser = (
   next: NextFunction
 ) => {
   const user = (req as any).user as AuthenticatedUser;
-  if (user.role !== "user" && user.role !== "admin") {
-    return res.status(403).json({ message: "User or admin access required" });
+  if (user.role !== "user" && user.role !== "admin" && !user.special) {
+    return res
+      .status(403)
+      .json({ message: "User, admin, or special counter access required" });
   }
   next();
 };
@@ -74,8 +77,10 @@ export const authorizeAdminOrUser = (
   next: NextFunction
 ) => {
   const user = (req as any).user as AuthenticatedUser;
-  if (user.role !== "admin" && user.role !== "user") {
-    return res.status(403).json({ message: "Admin or user access required" });
+  if (user.role !== "admin" && user.role !== "user" && !user.special) {
+    return res
+      .status(403)
+      .json({ message: "Admin, user, or special counter access required" });
   }
   next();
 };
@@ -86,10 +91,25 @@ export const authorizeAdminOrManager = (
   next: NextFunction
 ) => {
   const user = (req as any).user as AuthenticatedUser;
-  if (user.role !== "admin" && user.role !== "manager") {
-    return res
-      .status(403)
-      .json({ message: "Admin or manager access required" });
+  if (user.role === "admin" || user.role === "manager" || user.special) {
+    return next();
   }
-  next();
+  return res
+    .status(403)
+    .json({ message: "Admin, manager, or special counter access required" });
+};
+
+// NEW: Special counter authorization
+export const authorizeSpecialCounter = (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  const user = (req as any).user as AuthenticatedUser;
+  if (user.special || user.role === "admin") {
+    return next();
+  }
+  return res
+    .status(403)
+    .json({ message: "Special counter or admin access required" });
 };

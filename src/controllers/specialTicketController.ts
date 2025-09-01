@@ -1,3 +1,4 @@
+// FILE: controllers/specialTicketController.ts
 import { Request, Response } from "express";
 import SpecialTicket from "../models/SpecialTicket";
 import { userTicketSchema } from "../schemas/userSchema";
@@ -11,6 +12,7 @@ interface AuthenticatedUser {
   id: number;
   username: string;
   role?: string;
+  special?: boolean;
 }
 
 export const createSpecialTicket = async (req: Request, res: Response) => {
@@ -31,52 +33,43 @@ export const createSpecialTicket = async (req: Request, res: Response) => {
     }
 
     const counter = await Counter.findByPk(user.id);
-    if (!counter || !counter.special) {
+    if (!counter) {
+      return res.status(404).json({ message: "Counter not found" });
+    }
+
+    // Allow special counters OR admins to create special tickets
+    if (!counter.special && user.role !== "admin") {
       return res
         .status(403)
-        .json({ message: "Access denied: Special counter required" });
+        .json({ message: "Access denied: Special counter or admin required" });
     }
 
     const generateInvoiceNo = async (): Promise<string> => {
-      return `SPT${uuidv4().slice(0, 8)}`;
+      return `SPT${uuidv4().slice(0, 8).toUpperCase()}`;
     };
 
     const invoice_no = await generateInvoiceNo();
     const ticketData: any = {
+      ...req.body,
       invoice_no,
       counter_id: user.id,
       status: "completed" as const,
-      vehicle_type: req.body.vehicle_type || "Unknown",
-      guide_name: req.body.guide_name || "N/A",
-      guide_number: req.body.guide_number || "N/A",
-      show_name: req.body.show_name || "N/A",
-      adults: req.body.adults || 0,
-      ticket_price: req.body.ticket_price || 0,
-      total_price: req.body.total_price || 0,
-      tax: req.body.tax || 0,
-      final_amount: req.body.final_amount || 0,
     };
 
-    const [ticket, adminTicket] = await Promise.all([
-      SpecialTicket.create(ticketData),
-      Ticket.create({
-        price: ticketData.final_amount || 0,
-        dropdown_name: ticketData.vehicle_type || "Unknown",
-        show_name: ticketData.show_name || "N/A",
-        counter_id: user.id,
-      }),
-    ]);
+    // FIX: Only create the SpecialTicket, DO NOT create admin dashboard Ticket
+    const ticket = await SpecialTicket.create(ticketData);
 
-    await Transaction.create({
-      invoice_no: ticket.invoice_no,
-      date: new Date(),
-      adult_count: ticketData.adults || 0,
-      child_count: 0,
-      category: "Special",
-      total_paid: ticketData.final_amount || 0,
-      ticket_id: adminTicket.id,
-      counter_id: user.id,
-    });
+    // FIX: Also skip creating Transaction record since it references the admin Ticket
+    // await Transaction.create({
+    //   invoice_no: ticket.invoice_no,
+    //   date: new Date(),
+    //   adult_count: ticketData.adults || 0,
+    //   child_count: 0,
+    //   category: "Special",
+    //   total_paid: ticketData.final_amount || 0,
+    //   ticket_id: adminTicket.id, // This would reference the admin ticket
+    //   counter_id: user.id,
+    // });
 
     res.status(201).json({
       message: "Special ticket created successfully",
@@ -100,30 +93,34 @@ export const createSpecialTicket = async (req: Request, res: Response) => {
     console.error("Error in createSpecialTicket:", error);
     if (error.name === "SequelizeUniqueConstraintError") {
       return res.status(400).json({
-        message: `Failed to create ticket: ${error.errors[0].message}`,
-        details: error.fields,
+        message: "Failed to create ticket due to duplicate data",
+        error: "Please try again with different details",
       });
     }
     if (error.name === "SequelizeValidationError") {
       return res
         .status(400)
-        .json({ message: `Validation error: ${error.errors[0].message}` });
+        .json({ message: "Validation error: " + error.errors[0].message });
     }
     res.status(500).json({ message: "Internal server error" });
   }
 };
 
-// FILE: controllers/specialTicketController.ts
-// ... existing imports ...
-
+// FILE: controllers/specialTicketController.ts (update getSpecialTickets function)
 export const getSpecialTickets = async (req: Request, res: Response) => {
   try {
     const user = (req as any).user as AuthenticatedUser;
     const counter = await Counter.findByPk(user.id);
-    if (!counter || !counter.special) {
-      return res
-        .status(403)
-        .json({ message: "Access denied: Special counter required" });
+
+    if (!counter) {
+      return res.status(404).json({ message: "Counter not found" });
+    }
+
+    // Allow special counters, admins, and managers to view special tickets
+    if (!counter.special && user.role !== "admin" && user.role !== "manager") {
+      return res.status(403).json({
+        message: "Access denied: Special counter, admin, or manager required",
+      });
     }
 
     const { startDate, endDate, search, page = "1", limit = "10" } = req.query;
@@ -131,23 +128,26 @@ export const getSpecialTickets = async (req: Request, res: Response) => {
     const limitNum = parseInt(limit as string, 10);
     const offset = (pageNum - 1) * limitNum;
 
-    // Get today's date range
+    // Get today's date range (only show today's tickets by default)
     const today = new Date();
     const startOfToday = new Date(today);
     startOfToday.setHours(0, 0, 0, 0);
     const endOfToday = new Date(today);
     endOfToday.setHours(23, 59, 59, 999);
 
-    // Only show tickets from today for regular users
     let whereClause: any = {
-      counter_id: user.id,
       createdAt: {
         [Op.between]: [startOfToday, endOfToday],
       },
     };
 
-    // If admin provides date range, use it instead
-    if (user.role === "admin" && startDate && endDate) {
+    // For special counters, only show their own tickets
+    if (counter.special && user.role !== "admin") {
+      whereClause.counter_id = user.id;
+    }
+
+    // If date range is provided (for admin viewing historical data)
+    if (startDate && endDate) {
       whereClause.createdAt = {
         [Op.between]: [
           new Date(startDate as string),
@@ -161,6 +161,7 @@ export const getSpecialTickets = async (req: Request, res: Response) => {
         { guide_name: { [Op.iLike]: `%${search}%` } },
         { guide_number: { [Op.iLike]: `%${search}%` } },
         { invoice_no: { [Op.iLike]: `%${search}%` } },
+        { vehicle_type: { [Op.iLike]: `%${search}%` } },
       ];
     }
 
@@ -197,4 +198,27 @@ export const getSpecialTickets = async (req: Request, res: Response) => {
   }
 };
 
-// ... rest of the file remains unchanged ...
+export const deleteSpecialTicket = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const user = (req as any).user as AuthenticatedUser;
+
+    const ticket = await SpecialTicket.findByPk(id);
+    if (!ticket) {
+      return res.status(404).json({ message: "Special ticket not found" });
+    }
+
+    // Check permissions: admin or the counter that created the ticket
+    if (user.role !== "admin" && ticket.counter_id !== user.id) {
+      return res.status(403).json({ message: "Access denied" });
+    }
+
+    // FIX: Since we're not creating Transaction records anymore, just delete the special ticket
+    await ticket.destroy();
+
+    res.json({ message: "Special ticket deleted successfully" });
+  } catch (error) {
+    console.error("Error in deleteSpecialTicket:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};

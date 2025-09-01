@@ -155,6 +155,7 @@ export const changePassword = async (req: Request, res: Response) => {
   }
 };
 
+// FILE: controllers/counterController.ts
 export const createSpecialCounter = async () => {
   try {
     const username = "special_counter";
@@ -165,7 +166,7 @@ export const createSpecialCounter = async () => {
       await Counter.create({
         username,
         password: hashedPassword,
-        role: "user",
+        role: "manager", // Changed from "user" to "manager"
         special: true,
       });
       console.log("Special counter created with username: special_counter");

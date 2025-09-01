@@ -21,9 +21,12 @@ export const getTickets = async (req: Request, res: Response) => {
   try {
     const user = (req as any).user as AuthenticatedUser;
 
-    // If user is admin, show ALL tickets (both admin and user tickets)
+    // If user is admin, show ONLY admin-created tickets (is_analytics: false)
     if (user.role === "admin") {
       const tickets = await Ticket.findAll({
+        where: {
+          is_analytics: false, // Only admin-created tickets
+        },
         attributes: [
           "id",
           "price",
@@ -78,8 +81,11 @@ export const getTicketById = async (req: Request, res: Response) => {
 
     let whereClause: any = { id: ticketId };
 
-    // If user is not admin, restrict access
-    if (user.role !== "admin") {
+    // If user is admin, restrict to admin-created tickets only
+    if (user.role === "admin") {
+      whereClause.is_analytics = false; // Only admin tickets
+    } else {
+      // For non-admin users, restrict access
       whereClause[Op.or] = [
         { is_analytics: false }, // Admin-created tickets
         { counter_id: user.id }, // Their own user-created tickets
@@ -109,7 +115,6 @@ export const getTicketById = async (req: Request, res: Response) => {
     res.status(500).json({ message: "Internal server error" });
   }
 };
-
 export const addTicket = async (req: Request, res: Response) => {
   try {
     const { error } = ticketCreateSchema.validate(req.body, {
@@ -126,7 +131,7 @@ export const addTicket = async (req: Request, res: Response) => {
     const user = (req as any).user as AuthenticatedUser;
     const { dropdown_name, show_name, price } = req.body;
 
-    // Determine if this is an analytics ticket based on user role
+    // FIX: Only set is_analytics to true for user-created tickets
     const isAnalytics = user.role === "user"; // User-created tickets affect analytics
 
     const ticket = await Ticket.create({
@@ -134,7 +139,7 @@ export const addTicket = async (req: Request, res: Response) => {
       dropdown_name: dropdown_name,
       show_name: show_name,
       counter_id: user.id,
-      is_analytics: isAnalytics,
+      is_analytics: false,
     } as any);
 
     res.status(201).json({
@@ -154,7 +159,6 @@ export const addTicket = async (req: Request, res: Response) => {
     res.status(500).json({ message: "Internal server error" });
   }
 };
-
 export const updateTicket = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;

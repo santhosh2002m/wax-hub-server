@@ -1,11 +1,11 @@
-// src/controllers/guideController.ts
+// FILE: controllers/guideController.ts
 import { Request, Response } from "express";
-import Guide from "../models/guideModel";
+import UserGuide from "../models/userGuideModel";
 import { guideSchema } from "../schemas/guideSchema";
 
 export const getGuides = async (req: Request, res: Response) => {
   try {
-    const guides = await Guide.findAll();
+    const guides = await UserGuide.findAll();
     res.json(guides);
   } catch (error) {
     console.error("Error in getGuides:", error);
@@ -19,7 +19,7 @@ export const addGuide = async (req: Request, res: Response) => {
     if (error)
       return res.status(400).json({ message: error.details[0].message });
 
-    const guide = await Guide.create(req.body);
+    const guide = await UserGuide.create(req.body);
     res.status(201).json(guide);
   } catch (error) {
     console.error("Error in addGuide:", error);
@@ -34,10 +34,10 @@ export const updateGuide = async (req: Request, res: Response) => {
     if (error)
       return res.status(400).json({ message: error.details[0].message });
 
-    const guide = await Guide.findByPk(id);
+    const guide = await UserGuide.findByPk(id);
     if (!guide) return res.status(404).json({ message: "Guide not found" });
 
-    await Guide.update(req.body, { where: { id } });
+    await UserGuide.update(req.body, { where: { id } });
     res.json({ message: "Guide updated" });
   } catch (error) {
     console.error("Error in updateGuide:", error);
@@ -48,10 +48,10 @@ export const updateGuide = async (req: Request, res: Response) => {
 export const deleteGuide = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const guide = await Guide.findByPk(id);
+    const guide = await UserGuide.findByPk(id);
     if (!guide) return res.status(404).json({ message: "Guide not found" });
 
-    await Guide.destroy({ where: { id } });
+    await UserGuide.destroy({ where: { id } });
     res.json({ message: "Guide deleted" });
   } catch (error) {
     console.error("Error in deleteGuide:", error);

@@ -1,4 +1,5 @@
-import { DataTypes, Model, Optional } from "sequelize";
+// FILE: models/SpecialTicket.ts
+import { DataTypes, Model, Optional, Association } from "sequelize";
 import sequelize from "../config/database";
 import Counter from "./counterModel";
 
@@ -26,10 +27,16 @@ export interface SpecialTicketCreationAttributes
     "id" | "createdAt" | "updatedAt" | "status"
   > {}
 
+// Add this interface for the associations
+interface SpecialTicketAssociations {
+  counter?: Counter;
+}
+
 export class SpecialTicket
   extends Model<SpecialTicketAttributes, SpecialTicketCreationAttributes>
-  implements SpecialTicketAttributes
+  implements SpecialTicketAttributes, SpecialTicketAssociations
 {
+  // Add the associations interface
   public id!: number;
   public invoice_no!: string;
   public vehicle_type!: string;
@@ -45,6 +52,14 @@ export class SpecialTicket
   public counter_id!: number;
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
+
+  // Add the association property
+  public counter?: Counter;
+
+  // Add static associations if needed
+  public static associations: {
+    counter: Association<SpecialTicket, Counter>;
+  };
 }
 
 SpecialTicket.init(

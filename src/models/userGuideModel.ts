@@ -45,20 +45,57 @@ class UserGuide
 UserGuide.init(
   {
     id: { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
-    name: { type: DataTypes.STRING, allowNull: false },
-    number: { type: DataTypes.STRING, allowNull: false, unique: true },
-    vehicle_type: { type: DataTypes.STRING, allowNull: false },
-    score: { type: DataTypes.INTEGER, defaultValue: 0 },
-    total_bookings: { type: DataTypes.INTEGER, defaultValue: 0 },
-    rating: { type: DataTypes.FLOAT, defaultValue: 0.0 },
-    status: { type: DataTypes.STRING, defaultValue: "active" },
-    created_at: { type: DataTypes.DATE, allowNull: false, field: "created_at" },
-    updated_at: { type: DataTypes.DATE, allowNull: false, field: "updated_at" },
+    name: {
+      type: DataTypes.STRING,
+      allowNull: false,
+    },
+    number: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      defaultValue: "N/A",
+    },
+    vehicle_type: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      defaultValue: "Unknown",
+    },
+    score: {
+      type: DataTypes.INTEGER,
+      defaultValue: 0,
+      allowNull: false,
+    },
+    total_bookings: {
+      type: DataTypes.INTEGER,
+      defaultValue: 0,
+      allowNull: false,
+    },
+    rating: {
+      type: DataTypes.FLOAT,
+      defaultValue: 0.0,
+      allowNull: false,
+    },
+    status: {
+      type: DataTypes.STRING,
+      defaultValue: "active",
+      allowNull: false,
+    },
+    created_at: {
+      type: DataTypes.DATE,
+      allowNull: false,
+      field: "created_at",
+      defaultValue: DataTypes.NOW,
+    },
+    updated_at: {
+      type: DataTypes.DATE,
+      allowNull: false,
+      field: "updated_at",
+      defaultValue: DataTypes.NOW,
+    },
   },
   {
     sequelize,
     modelName: "UserGuide",
-    tableName: "guides",
+    tableName: "user_guides",
     timestamps: true,
     underscored: true,
   }

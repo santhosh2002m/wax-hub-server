@@ -6,13 +6,17 @@ import {
   registerAdmin,
   changePassword,
 } from "../controllers/counterController";
-import { authenticateJWT, authorizeAdmin } from "../middlewares/authMiddleware";
+import {
+  authenticateJWT,
+  authorizeAdmin,
+  authorizeAdminOrManager,
+} from "../middlewares/authMiddleware"; // Added authorizeAdminOrManager
 
 const router = express.Router();
 
 router.post("/", authenticateJWT, authorizeAdmin, addCounter);
-router.delete("/:username", authenticateJWT, authorizeAdmin, deleteCounter); // Changed :id to :username
-router.get("/", authenticateJWT, authorizeAdmin, getCounters);
+router.delete("/:username", authenticateJWT, authorizeAdmin, deleteCounter);
+router.get("/", authenticateJWT, authorizeAdminOrManager, getCounters); // Changed to allow managers
 router.post("/register", authenticateJWT, authorizeAdmin, registerAdmin);
 router.put("/password", authenticateJWT, changePassword);
 

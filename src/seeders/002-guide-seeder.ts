@@ -1,9 +1,9 @@
-// FILE: seeders/002-guide-seeder.ts
 import { QueryInterface } from "sequelize";
 
 module.exports = {
   up: async (queryInterface: QueryInterface) => {
-    await queryInterface.bulkInsert("guides", [
+    await queryInterface.bulkInsert("user_guides", [
+      // CHANGED FROM "guides" TO "user_guides"
       {
         name: "Rajesh Kumar",
         number: "+919876543210",
@@ -52,6 +52,6 @@ module.exports = {
   },
 
   down: async (queryInterface: QueryInterface) => {
-    await queryInterface.bulkDelete("guides", {});
+    await queryInterface.bulkDelete("user_guides", {}); // CHANGED FROM "guides" TO "user_guides"
   },
 };

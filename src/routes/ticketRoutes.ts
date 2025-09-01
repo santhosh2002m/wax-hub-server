@@ -15,7 +15,7 @@ import {
 
 const router = express.Router();
 
-// Allow both admin and user to read tickets
+// Allow both admin, manager, and user to read tickets
 router.get("/", authenticateJWT, authorizeAdminOrUser, getTickets);
 router.get("/:id", authenticateJWT, authorizeAdminOrUser, getTicketById);
 

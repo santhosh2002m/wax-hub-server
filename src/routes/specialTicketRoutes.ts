@@ -3,16 +3,23 @@ import express from "express";
 import {
   createSpecialTicket,
   getSpecialTickets,
+  deleteSpecialTicket,
 } from "../controllers/specialTicketController";
 import {
   authenticateJWT,
-  authorizeManager,
-  authorizeUser,
+  authorizeSpecialCounter,
+  authorizeAdminOrManager, // Changed from authorizeAdminOrManager to allow managers
 } from "../middlewares/authMiddleware";
 
 const router = express.Router();
 
-router.post("/", authenticateJWT, authorizeManager, createSpecialTicket);
-router.get("/", authenticateJWT, authorizeUser, getSpecialTickets); // Updated to use authorizeUser
+router.post("/", authenticateJWT, authorizeSpecialCounter, createSpecialTicket);
+router.get("/", authenticateJWT, authorizeAdminOrManager, getSpecialTickets); // Changed to allow managers
+router.delete(
+  "/:id",
+  authenticateJWT,
+  authorizeAdminOrManager, // Changed to allow managers
+  deleteSpecialTicket
+);
 
 export default router;
