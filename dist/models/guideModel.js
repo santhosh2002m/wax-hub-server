@@ -34,3 +34,4 @@ Guide.init({
     tableName: "Guides",
 });
 exports.default = Guide;
+//# sourceMappingURL=guideModel.js.map

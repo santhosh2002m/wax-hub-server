@@ -1,44 +1,34 @@
 "use strict";
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 module.exports = {
-    up: (queryInterface, Sequelize) => __awaiter(void 0, void 0, void 0, function* () {
-        yield queryInterface.createTable("counters", {
-            // Use lowercase
+    up: async (queryInterface, Sequelize) => {
+        await queryInterface.createTable("counters", {
             id: {
                 allowNull: false,
                 autoIncrement: true,
                 primaryKey: true,
                 type: Sequelize.INTEGER,
             },
-            username: {
-                type: Sequelize.STRING(50),
-                unique: true,
+            username: { type: Sequelize.STRING(50), unique: true, allowNull: false },
+            password: { type: Sequelize.STRING(255), allowNull: false },
+            role: {
+                type: Sequelize.ENUM("manager", "admin", "user"), // Added "user" role
+                defaultValue: "manager",
                 allowNull: false,
             },
-            password: {
-                type: Sequelize.STRING(255),
+            special: {
+                type: Sequelize.BOOLEAN,
+                defaultValue: false,
                 allowNull: false,
             },
-            createdAt: {
-                allowNull: false,
-                type: Sequelize.DATE,
-            },
-            updatedAt: {
-                allowNull: false,
-                type: Sequelize.DATE,
-            },
+            createdAt: { allowNull: false, type: Sequelize.DATE },
+            updatedAt: { allowNull: false, type: Sequelize.DATE },
         });
-    }),
-    down: (queryInterface, Sequelize) => __awaiter(void 0, void 0, void 0, function* () {
-        yield queryInterface.dropTable("counters"); // Use lowercase
-    }),
+    },
+    down: async (queryInterface) => {
+        await queryInterface.dropTable("transactions", { cascade: true });
+        await queryInterface.dropTable("messages", { cascade: true });
+        await queryInterface.dropTable("counters", { cascade: true });
+    },
 };
+//# sourceMappingURL=20240826-create-counter.js.map

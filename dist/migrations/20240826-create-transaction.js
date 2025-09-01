@@ -1,67 +1,36 @@
 "use strict";
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
+Object.defineProperty(exports, "__esModule", { value: true });
 module.exports = {
-    up: (queryInterface, Sequelize) => __awaiter(void 0, void 0, void 0, function* () {
-        yield queryInterface.createTable("Transactions", {
+    up: async (queryInterface, Sequelize) => {
+        await queryInterface.createTable("transactions", {
             id: {
                 allowNull: false,
                 autoIncrement: true,
                 primaryKey: true,
                 type: Sequelize.INTEGER,
             },
-            invoice_no: {
-                type: Sequelize.STRING(50),
-                unique: true,
-            },
-            date: {
-                type: Sequelize.DATE,
-                allowNull: false,
-            },
-            adult_count: {
-                type: Sequelize.INTEGER,
-                defaultValue: 1,
-            },
-            total_paid: {
-                type: Sequelize.INTEGER,
-                allowNull: false,
-            },
+            invoice_no: { type: Sequelize.STRING, allowNull: false, unique: true },
+            date: { type: Sequelize.DATE, allowNull: false },
+            adult_count: { type: Sequelize.INTEGER, allowNull: false },
+            child_count: { type: Sequelize.INTEGER, allowNull: false },
+            category: { type: Sequelize.STRING, allowNull: false },
+            total_paid: { type: Sequelize.FLOAT, allowNull: false },
             ticket_id: {
                 type: Sequelize.INTEGER,
-                references: {
-                    model: "Tickets",
-                    key: "id",
-                },
-                onUpdate: "CASCADE",
-                onDelete: "SET NULL",
+                allowNull: false,
+                references: { model: "tickets", key: "id" },
             },
             counter_id: {
                 type: Sequelize.INTEGER,
-                references: {
-                    model: "Counters",
-                    key: "id",
-                },
-                onUpdate: "CASCADE",
-                onDelete: "SET NULL",
+                allowNull: true,
+                references: { model: "counters", key: "id" },
             },
-            createdAt: {
-                allowNull: false,
-                type: Sequelize.DATE,
-            },
-            updatedAt: {
-                allowNull: false,
-                type: Sequelize.DATE,
-            },
+            createdAt: { allowNull: false, type: Sequelize.DATE },
+            updatedAt: { allowNull: false, type: Sequelize.DATE },
         });
-    }),
-    down: (queryInterface, Sequelize) => __awaiter(void 0, void 0, void 0, function* () {
-        yield queryInterface.dropTable("Transactions");
-    }),
+    },
+    down: async (queryInterface) => {
+        await queryInterface.dropTable("transactions");
+    },
 };
+//# sourceMappingURL=20240826-create-transaction.js.map

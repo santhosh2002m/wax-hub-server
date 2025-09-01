@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.loginSchema = void 0;
 const joi_1 = __importDefault(require("joi"));
 exports.loginSchema = joi_1.default.object({
-    username: joi_1.default.string().required(),
-    password: joi_1.default.string().required(),
+    username: joi_1.default.string().min(3).max(50).required(),
+    password: joi_1.default.string().min(6).required(),
 });
+//# sourceMappingURL=authSchema.js.map
