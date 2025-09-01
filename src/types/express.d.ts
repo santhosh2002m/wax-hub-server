@@ -1,5 +1,6 @@
 // src/types/express.d.ts
 import "express";
+declare module "express";
 
 declare global {
   namespace Express {

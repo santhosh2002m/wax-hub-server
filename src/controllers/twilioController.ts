@@ -307,7 +307,7 @@ export const getMessageStats = async (req: Request, res: Response) => {
       raw: true,
     });
 
-    const dailyStats = await TwilioMessage.findAll({
+    const dailyStats = (await TwilioMessage.findAll({
       attributes: [
         [fn("DATE", col("createdAt")), "date"],
         [fn("COUNT", col("id")), "count"],
@@ -316,7 +316,7 @@ export const getMessageStats = async (req: Request, res: Response) => {
       group: [fn("DATE", col("createdAt"))],
       order: [[fn("DATE", col("createdAt")), "ASC"]],
       raw: true,
-    });
+    })) as unknown as Array<{ date: string; count: number }>;
 
     res.json({
       total: totalMessages,
